@@ -1,6 +1,6 @@
 import clp from 'console-log-plus';
 import os, { EOL } from 'os';
-import { IS_PROD } from '../constants/env';
+import { IS_PROD, IS_RENDERER } from '../constants/env';
 import { APP_NAME, APP_VERSION } from '../constants/meta';
 import { PATHS } from '../constants/paths';
 import { appendFileAsync } from '../helpers/fileOps';
@@ -36,6 +36,18 @@ export const log = {
       return;
     }
 
+    if (!IS_RENDERER) {
+      if (!isEmpty(title)) {
+        console.info(title);
+      }
+
+      if (!isEmpty(e)) {
+        console.info(e);
+      }
+
+      return;
+    }
+
     if (!isEmpty(title)) {
       clp({
         color: 'white',
@@ -64,6 +76,16 @@ export const log = {
     this.doLog(e, title, null, logError, report, true);
 
     if (IS_PROD && !allowInProd) {
+      return;
+    }
+
+    if (!IS_RENDERER) {
+      if (!isEmpty(title)) {
+        console.error(title);
+      }
+
+      console.error(e);
+
       return;
     }
 

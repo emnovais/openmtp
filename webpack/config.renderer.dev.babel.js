@@ -138,9 +138,11 @@ export default merge(baseConfig, {
       // WOFF Font
       {
         test: /\.woff(\?v=\d+\.\d+\.\d+)?$/,
+        type: 'javascript/auto',
         use: {
           loader: 'url-loader',
           options: {
+            esModule: false,
             limit: 10000,
             mimetype: 'application/font-woff',
           },
@@ -149,9 +151,11 @@ export default merge(baseConfig, {
       // WOFF2 Font
       {
         test: /\.woff2(\?v=\d+\.\d+\.\d+)?$/,
+        type: 'javascript/auto',
         use: {
           loader: 'url-loader',
           options: {
+            esModule: false,
             limit: 10000,
             mimetype: 'application/font-woff',
           },

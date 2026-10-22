@@ -103,23 +103,25 @@ function fixSettings() {
 }
 
 async function installExtensions() {
-  const {
-    default: installExtension,
-    REDUX_DEVTOOLS,
-    REACT_DEVELOPER_TOOLS,
-  } = await import('electron-devtools-installer');
+  try {
+    const {
+      default: installExtension,
+      REDUX_DEVTOOLS,
+      REACT_DEVELOPER_TOOLS,
+    } = await import('electron-devtools-installer');
 
-  const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
-  const extensions = [REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS];
+    const forceDownload = !!process.env.UPGRADE_EXTENSIONS;
+    const extensions = [REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS];
 
-  return installExtension(extensions, {
-    forceDownload,
-  }).catch((err) =>
+    await installExtension(extensions, {
+      forceDownload,
+    });
+  } catch (err) {
     log.error(
       `An extension error occurred: ${err}`,
       `main.dev -> installExtensions`
-    )
-  );
+    );
+  }
 }
 
 async function createWindow() {

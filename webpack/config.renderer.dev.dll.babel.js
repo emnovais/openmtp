@@ -22,6 +22,7 @@ export default merge(baseConfig, {
   devtool: 'eval',
   mode: 'development',
   target: 'electron-renderer',
+  externalsType: 'commonjs2',
   externals: ['fsevents', 'crypto-browserify'],
 
   /**

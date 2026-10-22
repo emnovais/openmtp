@@ -1519,18 +1519,6 @@ $faqStepsBgColor: #f6f8fa;
   }
 }
 
-.faq-window {
-  border-radius: 10px;
-
-  .body-wrapper {
-    padding: 4px 48px 20px;
-
-    @include mobile {
-      padding: 0 20px 12px;
-    }
-  }
-}
-
 .faq-item {
   display: grid;
   grid-template-columns: 44px minmax(0, 1fr);
@@ -1703,7 +1691,16 @@ $faqStepsBgColor: #f6f8fa;
  */
 .faq-window {
   border: 1px solid #2f2f2f;
+  border-radius: 10px;
   background: #1f1f1f;
+
+  .body-wrapper {
+    padding: 4px 48px 20px;
+
+    @include mobile {
+      padding: 0 20px 12px;
+    }
+  }
 
   .faq-item + .faq-item {
     border-top-color: #2f2f2f;
@@ -2643,6 +2640,7 @@ body.page-light {
   .about-story & {
     margin-top: 0;
   }
+
   border-left: 3px solid #f59f00;
   border-radius: 8px;
   background: #fff6e0;
@@ -2690,8 +2688,7 @@ body.page-light {
     gap: 10px;
 
     @include tablet {
-      flex-direction: row;
-      flex-wrap: wrap;
+      flex-flow: row wrap;
       gap: 8px 20px;
     }
 
