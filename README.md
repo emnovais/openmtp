@@ -1,179 +1,84 @@
-# OpenMTP | Android File Transfer for macOS
+# OpenMTP — File Explorer Development Fork
 
-- Author: [Ganesh Rathinavel](https://www.linkedin.com/in/ganeshrvel 'Ganesh Rathinavel')
-- Author's Website: [ganeshrvel.com](https://www.ganeshrvel.com 'ganeshrvel.com')
-- License: [MIT](https://github.com/ganeshrvel/openmtp/blob/master/LICENSE 'MIT')
-- System Requirements: macOS 10.14 (Mojave) or higher. macOS 10.13 and earlier have limited support and require OpenMTP v3.1.15 with Legacy MTP mode.
-- Website URL: [https://openmtp.ganeshrvel.com](https://openmtp.ganeshrvel.com/ 'https://openmtp.ganeshrvel.com')
-- Guide: [How to Transfer Files Between Mac and Android or Other MTP Devices using OpenMTP](https://openmtp.ganeshrvel.com/how-to-connect-devices.html 'How to Transfer Files Between Mac and Android or Other MTP Devices using OpenMTP')
-- FAQ: [https://openmtp.ganeshrvel.com/#faq](https://openmtp.ganeshrvel.com/#faq 'https://openmtp.ganeshrvel.com/#faq')
-- Repo URL: [https://github.com/ganeshrvel/openmtp](https://github.com/ganeshrvel/openmtp/ 'https://github.com/ganeshrvel/openmtp')
-- Contacts: ganeshrvel@outlook.com
+**[English → README.md](README.md) | [Português (Brasil) → README.pt-BR.md](README.pt-BR.md)**
 
-## Introduction
+A development fork of [OpenMTP by Ganesh Rathinavel](https://github.com/ganeshrvel/openmtp), exploring a faster macOS/Android file browser and safer existing USB transfers. This fork preserves the Electron 18, React 17 and Redux architecture. It is not an official upstream release.
 
-### Advanced Android File Transfer Application for macOS.
+**Status: unreleased development work.** Local and bounded Legacy-device browsing/thumbnail checks have passed. The recent transfer-safety changes have offline regression coverage, but physical file transfers with those changes have not been validated. No installable public release containing these improvements is verified or advertised here. `3.3.0` is the inherited package version, not a new fork release.
 
-Transferring files between macOS and Android or any other MTP devices has always been a nightmare. There are a few File Transfer MTP apps that are available online but most of them are either too expensive or come with bad UI/UX. The official "Android File Transfer" app for macOS from Google comes with bugs, innumerable limitations, some of which include - not being able to transfer files larger than 4GB, frequent disconnections, and being unable to rename the folders or files on the Android/MTP devices. Most of the other apps available online use either WiFi or ADB protocol to transfer the files, which is an extremely time-consuming process.
+## Improvements
 
-Countless searches to find an app to solve these problems and failing to find one made me restless. So, I took the leap and decided to create an app for us that could help us have a smooth and hassle-free file transfer process from macOS to Android/MTP devices. Created with the objective of giving back to the community, we can all use this app for free in this lifetime.
+- **Independent List/Grid controls:** each Computer and Phone toolbar selects its own mode, synchronized with Settings and existing persistence. Current directories, selection, sorting and clipboard state are preserved.
+- **Grid performance:** viewport windowing mounts only visible/nearby rows, with scroll/resize scheduling and selection over the complete logical listing. List view remains unvirtualized. Bounded physical testing on a 916-entry directory observed 24–36 mounted Grid tiles; this is a test observation, not a general performance guarantee.
+- **Image thumbnails:** local JPEG/PNG previews and Legacy Android `get-thumb` previews load progressively through real viewport visibility. Unsupported, unavailable or stale results retain the file icon. No full-resolution Android download is used as a thumbnail fallback.
+- **Bounded caching:** completed previews can be reused across Grid → List → Grid in the same context. In-flight consumer replacement avoids duplicate work. Context checks include file/listing identity and, for Android, backend, storage and renderer session scope. Native temporary output is validated and removed; completed previews are held in a bounded memory cache, not a persistent disk library.
+- **Clipboard navigation:** copied paths survive navigation. Endpoint/context checks reject stale source identities, retargeted destinations and delayed confirmations.
+- **Transfer outcomes:** progress reaching 100% is not treated as success. Terminal evidence, native return/process closure and error propagation are checked. Destination presence is verified after a reported successful transfer; presence alone does not prove byte-for-byte integrity.
+- **Destination preflight:** existing, absent and unknown are distinct. Lookup errors block continuation instead of silently authorizing an overwrite or treating a destination as missing.
+- **MTP serialization:** supported renderer-owned execution paths share a FIFO queue. A JavaScript timeout does not release an operation that may still be running. This is not a system-wide or cross-process lock.
 
-### Thank you 🎉
+Detailed statuses and source references are maintained in the [feature inventory](docs/FEATURE_STATUS.md).
 
-OpenMTP has crossed **1.4 million downloads**, from users in **180+ countries**, and the repo has picked up **7.4K+ stars** along the way. It is the **#1 open-source MTP app for Mac**, and it stays free, open-source and ad-free.
+## Operations and scope
 
-| Milestone                     | Value        |
-| ----------------------------- | ------------ |
-| Downloads                     | 1.4 million+ |
-| Countries                     | 180+         |
-| GitHub stars                  | 7.4K+        |
-| Open-source MTP app for macOS | #1           |
+| Operation                                                    | Current status                                                                                           |
+| ------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------- |
+| Mac → Android Copy/Paste                                     | Existing path preserved and hardened; automated validation, physical transfer acceptance pending         |
+| Android → Mac Copy/Paste                                     | Existing path preserved and hardened; automated validation, physical transfer acceptance pending         |
+| Directory navigation, multiple selection, sorting, List/Grid | Implemented; automated and bounded UI/device observations                                                |
+| Independent Delete, Rename and New Folder                    | Existing functionality preserved; offline regression coverage does not establish new physical acceptance |
+| Mac → Mac or Android → Android Paste                         | Restricted; excluded from this project's current scope                                                   |
+| Cut, Move, source deletion during Paste                      | Excluded; not implemented by this work                                                                   |
+| Video thumbnails, adjustable small/medium/large icon modes   | Not implemented by this work                                                                             |
 
-Thank you for using it, reporting issues and testing devices I don't own. 🎉
+Copy/Paste preserves source files. Independent Delete remains an explicit destructive action; it is not part of copying.
 
-The next generation of OpenMTP is in active development and coming soon. It's a major upgrade with new features and big improvements to stability and performance. Stay tuned, and thanks for all the support!
+## Native MTP compatibility
 
-### Features
+The default Legacy backend still uses the original bundled CLI. T11.3 tested an isolated native USB-discovery correction; **T11.4 separately integrated an explicit development-only override** and tested the actual datasource/repository/controller/queue and extracted Paste preflight logic.
 
-- Safe, Transparent and Open-Source
-- Plug and Play via USB. No hassles, easy and instant connection.
-- Select between Internal Memory and SD Card
-- Transfer multiple files which are larger than 4GB
-- Dark mode
-- Drag-and-drop support
-- Split pane views for both Local Computer and Android device
-- Choose between Grid and List view.
-- Use Keyboard Shortcuts to navigate through your files.
-- No collection of personally identifiable information.
+Four T11.4 physical metadata queries succeeded on an AYN Thor running Android 13, including existing/missing destination results. The corrected executable was not bundled or released. Packaged builds ignore the override. Its x86_64 build targets macOS 10.14, but runtime testing occurred only on macOS 26.6.2 on Apple Silicon; this does **not** establish older-macOS compatibility.
 
-### Installation
+Legacy thumbnails have bounded positive device evidence, including cache reuse. Some device objects returned `GeneralError (0x2002)` and kept fallback icons. Kalam navigation has earlier positive observations and unresolved `LIBUSB_ERROR_NOT_FOUND`/session diagnostics; Kalam image thumbnails are not implemented. The native ownership redesign is paused; the active application remains renderer-owned.
 
-> ⚠️ **Only download OpenMTP from the official sources below.** There are copycat websites that use the OpenMTP name, logo and content, redirect to various other pages. The only official sources are the official website [openmtp.ganeshrvel.com](https://openmtp.ganeshrvel.com/ 'https://openmtp.ganeshrvel.com'), this Github repository [github.com/ganeshrvel/openmtp](https://github.com/ganeshrvel/openmtp 'https://github.com/ganeshrvel/openmtp'), and [formulae.brew.sh/cask/openmtp](https://formulae.brew.sh/cask/openmtp 'Homebrew Cask').
+See [native compatibility and reproduction](docs/NATIVE_MTP.md) and [known limitations](docs/KNOWN_LIMITATIONS.md). A successful thumbnail or metadata query is not proof of general USB health or transfer correctness.
 
-- Download the [Mac Apple Silicon](https://openmtp.ganeshrvel.com/?downloadApp=github&release=stable&platform=mac&arch=arm64 'Mac Apple Silicon') version
-- Download the [Mac Intel](https://openmtp.ganeshrvel.com/?downloadApp=github&release=stable&platform=mac&arch=x64 'Mac Intel') version
-- Using Homebrew Cask
+## Installation and development
 
-```shell
-  # newer versions:
-  brew install openmtp --cask
-  # older versions:
-  brew cask install openmtp
+This checkout is for development. For the original application's downloads, use the [upstream website](https://openmtp.ganeshrvel.com/) or [upstream releases](https://github.com/ganeshrvel/openmtp/releases); those builds do not contain this fork's unpublished improvements. No fork installer is provided here.
+
+Use isolated **Node 16.19.0, npm 8.16.0 and Yarn Classic 1.22.17**, macOS Command Line Tools and the existing lockfile. Do not upgrade dependencies to follow these instructions. Go and a native rebuild are unnecessary for the normal JavaScript build using the checked-in libraries.
+
+```sh
+git clone https://github.com/emnovais/openmtp.git
+cd openmtp
+# First select the isolated toolchain described in docs/DEVELOPMENT.md.
+HUSKY_SKIP_INSTALL=1 yarn install --frozen-lockfile --non-interactive
+yarn lint
+yarn lint-styles
+yarn build
 ```
 
-- Find the latest _dmg_ file from [GitHub Releases](https://github.com/ganeshrvel/openmtp/releases 'GitHub Releases')
+The install lifecycle builds the development DLL and Electron native addons. `yarn build-dll` can rebuild the DLL explicitly. For an interactive session, the existing command is `yarn dev`; **read the profile-isolation instructions first and disconnect Android devices before a general startup smoke test**. The inherited app identity/settings location can overlap with an installed OpenMTP, and opening the explorer can initialize MTP automatically.
 
-### System Requirements and Support
+The [development guide](docs/DEVELOPMENT.md) contains reproducible test commands, safe profile guidance and the native-override boundary. Do not run package, signing or publishing commands as part of ordinary validation.
 
-- To support macOS version below Big Sur the Kalam Kernel needs to be compiled on an older macOS machine every time there is an update, which is practically very difficult
-- Only the latest 3 versions of macOS will receive the `Kalam` Kernel updates, which include new device support, fixes, and stability improvements. macOS Big Sur (11.0) or above will receive the above-mentioned updates
-- We have now officially retired the support for `Kalam` Kernel on macOS 10.13 (OS X High Sierra) and lower. Only the "Legacy" MTP mode will continue working on these outdated machines.
-- We will continue releasing the updates for both `Intel` and `ARM64` machines
+## Testing and release status
 
-#### Running OpenMTP on macOS 10.13 (High Sierra) and lower
+The publication-preparation validation on 25 October 2026 passed **846/846 Node cases across 17 suites**, **156/156 mocked Electron Grid/UI checks**, JavaScript lint, stylesheet lint and both production compilers. These are offline checks; this documentation task performed no Android operations.
 
-If the latest OpenMTP doesn't launch or doesn't work on your older Mac, use [OpenMTP v3.1.15](https://github.com/ganeshrvel/openmtp/releases/download/v3.1.15/OpenMTP-3.1.15.dmg 'Download OpenMTP v3.1.15') with the "Legacy" MTP mode instead. Auto-update has to be turned off, otherwise the app will replace itself with a version your Mac cannot run.
+Historical physical observations are deliberately bounded: browsing, selected thumbnails, progressive rendering, cache reuse and T11.4 metadata/preflight. Physical transfer correctness, content integrity, overwrite execution and cancellation remain acceptance work. Older macOS, other devices and Intel-host runtime compatibility are not established by this host's results.
 
-1. Download [OpenMTP v3.1.15](https://github.com/ganeshrvel/openmtp/releases/download/v3.1.15/OpenMTP-3.1.15.dmg 'Download OpenMTP v3.1.15')
-2. Drag the app into the Applications folder
-3. Turn off the internet
-4. Launch v3.1.15 of the app
-5. Go to Settings
-6. In the Update tab, turn off auto-update
-7. Turn the internet back on
+See the [changelog](CHANGELOG.md), [limitations](docs/KNOWN_LIMITATIONS.md), [draft bilingual release notes](docs/RELEASE_NOTES.md) and [publication plan](docs/PUBLICATION_PLAN.md). Publishing source and distributing a finished macOS application have separate readiness requirements, including third-party binary licensing and fork-specific release identity.
 
-### Screengrabs
+T13 prepares reviewed local source commits only. Public publication of this complete Git history remains on hold for [native provenance/license review](docs/NATIVE_PROVENANCE.md), because inherited binaries are already tracked. No physical Copy/Paste, overwrite or cancellation acceptance is claimed.
 
-![OpenMTP File Explorer](https://github.com/ganeshrvel/openmtp/raw/master/blobs/images/file-explorer-bluebg.jpg 'OpenMTP File Explorer')
+## Credits and contributions
 
-![OpenMTP File Transfer](https://github.com/ganeshrvel/openmtp/raw/master/blobs/images/file-transfer-bluebg.jpg 'OpenMTP File Transfer')
+OpenMTP was created by **Ganesh Rathinavel**. The original [MIT license](LICENSE) and copyright notices are preserved. Legacy MTP derives from Vladimir Menshakov's Android File Transfer for Linux under its own LGPL terms; third-party native code and artwork are not relicensed by OpenMTP's MIT license.
 
-### Keyboard Shortcuts
+Full original credits, logo/artwork attribution, upstream support links and redistribution-review notes are retained in [attribution](docs/ATTRIBUTION.md). The [upstream connection guide](https://openmtp.ganeshrvel.com/how-to-connect-devices.html) and [FAQ](https://openmtp.ganeshrvel.com/#faq) remain useful references for the original application.
 
-| Command                                           | Keyboard Shortcut                                                            |
-| ------------------------------------------------- | ---------------------------------------------------------------------------- |
-| Delete                                            | <kbd>backspace</kbd>                                                         |
-| New Folder                                        | <kbd>command (⌘)</kbd>+<kbd>n</kbd>                                          |
-| Copy                                              | <kbd>command (⌘)</kbd>+<kbd>c</kbd>                                          |
-| Copy to Queue                                     | <kbd>command (⌘)</kbd>+<kbd>shift</kbd>+<kbd>c</kbd>                         |
-| Paste                                             | <kbd>command (⌘)</kbd>+<kbd>v</kbd>                                          |
-| Refresh                                           | <kbd>command (⌘)</kbd> +<kbd>r</kbd>                                         |
-| Folder Up                                         | <kbd>command (⌘)</kbd>+<kbd>b</kbd>                                          |
-| Select All                                        | <kbd>command (⌘)</kbd>+<kbd>a</kbd>                                          |
-| Rename                                            | <kbd>command (⌘)</kbd>+<kbd>d</kbd>                                          |
-| Switch Tab                                        | <kbd>command(⌘)</kbd>+<kbd>1</kbd>                                           |
-| Open                                              | <kbd>enter</kbd>                                                             |
-| Navigate Left                                     | <kbd>left</kbd>                                                              |
-| Navigate Right                                    | <kbd>right</kbd>                                                             |
-| Navigate Up                                       | <kbd>up</kbd>                                                                |
-| Navigate Down                                     | <kbd>down</kbd>                                                              |
-| Select Multiple Items Forward **(in Grid View)**  | <kbd>shift</kbd>+<kbd>left</kbd>                                             |
-| Select Multiple Items Backward **(in Grid View)** | <kbd>shift</kbd>+<kbd>right</kbd>                                            |
-| Select Multiple Items Forward **(in List View)**  | <kbd>shift</kbd>+<kbd>up</kbd>                                               |
-| Select Multiple Items Backward **(in List View)** | <kbd>shift</kbd>+<kbd>down</kbd>                                             |
-| Select Multiple Items **(with mouse)**            | <kbd>command (⌘)</kbd>+<kbd>click</kbd> or <kbd>shift</kbd>+<kbd>click</kbd> |
+Read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting a change. Report this fork's issues to this repository and include sanitized environment/backend information; do not post personal device listings, photos or credentials.
 
-### Kalam Kernel
-
-OpenMTP 3.0 features a new MTP kernel and it was written from scratch. It promises a file copy speed of 20 to 30 MB/s on low and mid-range devices and 100 to 120 MB/s on higher end devices. The all-new and powerful MTP kernel is named after [Dr. A. P. J. Abdul Kalam](https://en.wikipedia.org/wiki/A._P._J._Abdul_Kalam 'Dr. A. P. J. Abdul Kalam')
-
-Do check out the Go package which I've written to build Kalam Kernel: [github.com/ganeshrvel/go-mtpx](https://github.com/ganeshrvel/go-mtpx 'https://github.com/ganeshrvel/go-mtpx'). Feel free to raise PRs.
-
-## Development
-
-Building from source, packaging, publishing and debugging are documented in [DEVELOPMENT.md](DEVELOPMENT.md 'DEVELOPMENT.md').
-
-### Troubleshooting
-
-#### OpenMTP doesn't launch or doesn't work on my Mac
-
-- Check your macOS version first: OpenMTP requires macOS 10.14 (Mojave) or higher
-- On macOS 10.13 (High Sierra) and lower, use [OpenMTP v3.1.15](https://github.com/ganeshrvel/openmtp/releases/download/v3.1.15/OpenMTP-3.1.15.dmg 'Download OpenMTP v3.1.15') with the "Legacy" MTP mode: [Running OpenMTP on macOS 10.13 (High Sierra) and lower](#running-openmtp-on-macos-1013-high-sierra-and-lower)
-- Still stuck? See the [troubleshooting guide](https://github.com/ganeshrvel/openmtp/issues/276 'Troubleshooting guide')
-
-### More open-source projects from the author
-
-- [npm: electron-root-path](https://github.com/ganeshrvel/npm-electron-root-path 'Get the root path of an Electron Application')
-- [Electron React Redux Advanced Boilerplate](https://github.com/ganeshrvel/electron-react-redux-advanced-boilerplate 'Electron React Redux advanced boilerplate')
-- [Tutorial Series by Ganesh Rathinavel](https://github.com/ganeshrvel/tutorial-series-ganesh-rathinavel 'Tutorial Series by Ganesh Rathinavel')
-
-### Credits
-
-- Special thanks to [CodeMagic](http://codemagic.io/ 'Codemagic - CI/CD') and [Kevin Suhajda](https://www.linkedin.com/in/kevinsuhajda 'Kevin Suhajda') for sponsoring their CI/CD VMs, thus making the app releases more streamlined and much easier now. 🎊🎊 Do check out their [products](https://codemagic.io/integrations 'Codemagic - integrations') section for more.
-
-- Special shoutout to [@CodyJung](https://github.com/CodyJung 'CodyJung') for adding the [Fujifilm](https://github.com/ganeshrvel/go-mtpfs/pull/2) and [Garmin](https://github.com/ganeshrvel/go-mtpfs/pull/1) device support. 🔥🔥
-
-- Thanks to Ms [Ayushi Bothra](https://www.linkedin.com/in/ayushi-bothra-3103/ 'Ayushi Bothra') for contributing to the documentation and pages.
-
-- App logo was contributed by [Shubhendu Mitra](https://www.linkedin.com/in/shubhendum/ 'Shubhendu Mitra - LinkedIn'). Make sure to check out more of his work on [Behance](https://www.behance.net/soponhara 'Shubhendu Mitra - Behance').
-
-- Thanks to [Vladimir Menshakov](https://github.com/whoozle 'Vladimir Menshakov') for [android-file-transfer-linux](https://github.com/whoozle/android-file-transfer-linux 'android-file-transfer-linux') (the legacy MTP Kernel)
-
-- Shoutout to [@yennsarah](https://github.com/yennsarah 'yennsarah'), [@h0tk3y](https://github.com/h0tk3y), [@riginoommen](https://github.com/riginoommen 'riginoommen'), [@AjithKumarvm](https://github.com/AjithKumarvm 'AjithKumarvm'), [@kiranshaji555](https://github.com/kiranshaji555), Dick Cowan, Kjell Dankert, Thorolf E.R. Weißhuhn and to all other community members who helped me test the application.
-
-- This app was built upon [https://github.com/ganeshrvel/electron-react-redux-advanced-boilerplate](https://github.com/ganeshrvel/electron-react-redux-advanced-boilerplate 'https://github.com/ganeshrvel/electron-react-redux-advanced-boilerplate'), which is a heavily modified fork of [https://github.com/electron-react-boilerplate/electron-react-boilerplate](https://github.com/electron-react-boilerplate/electron-react-boilerplate 'https://github.com/electron-react-boilerplate/electron-react-boilerplate').
-
-- The icons used in the app were made by [flaticon](https://www.flaticon.com), [good-ware](https://www.flaticon.com/authors/good-ware) and [kiranshastry](https://www.flaticon.com/authors/kiranshastry) which are licensed under [CC 3.0 BY](https://creativecommons.org/licenses/by/3.0/ 'Creative Commons BY 3.0').
-
-- The "no image found" icon was made by [Phonlaphat Thongsriphong](https://www.iconfinder.com/phatpc 'Phonlaphat Thongsriphong').
-
-### Contribute
-
-If you are interested in fixing issues and contributing directly to the code base, please see the [guidelines](https://github.com/ganeshrvel/openmtp/blob/master/CONTRIBUTING.md 'guidelines').
-
-### Support OpenMTP
-
-Help me keep the app FREE and open for all.
-
-- Support us via PayPal: [paypal.me/ganeshrvel](https://paypal.me/ganeshrvel 'https://paypal.me/ganeshrvel')
-- Buy Me A Coffee (UPI, PayPal, Credit/Debit Cards, Internet Banking): [buymeacoffee.com/ganeshrvel](https://buymeacoffee.com/ganeshrvel 'https://buymeacoffee.com/ganeshrvel')
-
-### Contacts
-
-Please feel free to contact me at ganeshrvel@outlook.com
-
-### License
-
-OpenMTP | Android File Transfer for macOS is released under the [MIT License](https://github.com/ganeshrvel/openmtp/blob/master/LICENSE 'MIT License').
-
-Copyright © 2018-Present Ganesh Rathinavel
+**Documentation languages:** English is primary. Brazilian Portuguese is maintained in `README.pt-BR.md`; changes to feature status, safety limits and release claims must update both READMEs. Detailed technical documents are shared between the two languages to avoid duplicate specifications.

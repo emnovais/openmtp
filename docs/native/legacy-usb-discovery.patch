@@ -1,0 +1,31 @@
+diff --git a/mtp/backend/darwin/usb/Interface.cpp b/mtp/backend/darwin/usb/Interface.cpp
+index 9297d4a..946be27 100644
+--- a/mtp/backend/darwin/usb/Interface.cpp
++++ b/mtp/backend/darwin/usb/Interface.cpp
+@@ -87,0 +88,7 @@ namespace mtp { namespace usb
++	int Interface::GetStringIndex() const
++	{
++		UInt8 index;
++		USB_CALL((*_interface)->USBInterfaceGetStringIndex(_interface, &index));
++		return index;
++	}
++
+diff --git a/mtp/backend/darwin/usb/Interface.h b/mtp/backend/darwin/usb/Interface.h
+index b683591..ce2acfc 100644
+--- a/mtp/backend/darwin/usb/Interface.h
++++ b/mtp/backend/darwin/usb/Interface.h
+@@ -91,0 +92 @@ namespace mtp { namespace usb
++		int GetStringIndex() const;
+diff --git a/mtp/ptp/Device.cpp b/mtp/ptp/Device.cpp
+index 9c68242..aa1ae7d 100644
+--- a/mtp/ptp/Device.cpp
++++ b/mtp/ptp/Device.cpp
+@@ -92 +91,0 @@ namespace mtp
+-				usb::InterfaceTokenPtr token = claimInterface? device->ClaimInterface(iface): nullptr;
+@@ -103 +102 @@ namespace mtp
+-				int interfaceStringIndex = GetInterfaceStringIndex(desc, j);
++				int interfaceStringIndex = iface->GetStringIndex();
+@@ -115,0 +115 @@ namespace mtp
++					usb::InterfaceTokenPtr token = claimInterface? device->ClaimInterface(iface): nullptr;
+@@ -124,0 +125 @@ namespace mtp
++					usb::InterfaceTokenPtr token = claimInterface? device->ClaimInterface(iface): nullptr;
