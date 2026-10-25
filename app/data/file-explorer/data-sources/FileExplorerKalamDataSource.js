@@ -1,5 +1,4 @@
 import { exec } from 'child_process';
-import { promisify } from 'node:util';
 import { log } from '../../../utils/log';
 import { Kalam } from '../../../../ffi/kalam/src/Kalam';
 import { checkIf } from '../../../utils/checkIf';
@@ -7,11 +6,25 @@ import { isArray, isEmpty } from '../../../utils/funcs';
 import { getFilesPreprocessingBeforeTransferSetting } from '../../../helpers/settings';
 import { msToTime } from '../../../utils/date';
 import { kalamDebugReportCli } from '../../../helpers/binaries';
+import mtpOperationQueue from '../MtpOperationQueue';
+import {
+  createTransferFinalizer,
+  createTransferResult,
+} from '../transferResult';
 
 export class FileExplorerKalamDataSource {
-  constructor() {
-    this.kalamFfi = new Kalam();
-    this.execPromise = promisify(exec);
+  constructor({ executionHooks = null } = {}) {
+    if (
+      (typeof process !== 'undefined' && process.type === 'browser') ||
+      (typeof window !== 'undefined' &&
+        window.location?.hash &&
+        !['#', '#/'].includes(window.location.hash))
+    ) {
+      throw new Error('MTP execution is restricted to the explorer renderer.');
+    }
+
+    this.executionHooks = executionHooks;
+    this.kalamFfi = new Kalam({ executionHooks });
   }
 
   /**
@@ -21,19 +34,44 @@ export class FileExplorerKalamDataSource {
    * @private
    */
   async _exec(command) {
-    try {
-      return new Promise((resolve) => {
-        this.execPromise(command, (error, stdout, stderr) => {
-          return resolve({
-            data: stdout,
-            stderr,
-            error,
-          });
-        });
-      });
-    } catch (e) {
-      log.error(e);
-    }
+    // Only the external diagnostic process acquires here. FFI methods already
+    // acquire at Kalam's leaf invocation boundary, avoiding nested acquisition.
+    return mtpOperationQueue.run(
+      () =>
+        new Promise((resolve) => {
+          let child;
+          let finished = false;
+          let output;
+          let spawnError;
+          const finish = () => {
+            if (finished) return;
+
+            finished = true;
+            const result = output || {
+              error: new Error('Diagnostic process closed without a result.'),
+              stderr: null,
+              data: null,
+            };
+
+            resolve({ ...result, error: spawnError || result.error });
+          };
+
+          try {
+            child = exec(command, (error, stdout, stderr) => {
+              if (!finished) output = { error, stderr, data: stdout };
+            });
+            child.once('close', finish);
+            child.on('error', (error) => {
+              spawnError = error;
+            });
+          } catch (error) {
+            spawnError = error;
+
+            if (!child) finish();
+          }
+        }),
+      this.executionHooks ? this.executionHooks() : undefined
+    );
   }
 
   /**
@@ -187,16 +225,39 @@ export class FileExplorerKalamDataSource {
       });
 
       if (error || stderr) {
-        return true;
+        return { error: error || stderr, stderr: stderr ?? null, data: null };
       }
 
-      if (isEmpty(data)) {
-        return true;
+      if (
+        error !== null ||
+        stderr !== null ||
+        fileList.length === 0 ||
+        !Array.isArray(data) ||
+        data.length !== fileList.length
+      ) {
+        throw new Error(
+          'Unable to verify destination files: invalid Kalam result.'
+        );
       }
 
-      const existsItems = data.filter((a) => a.exists);
+      for (let i = 0; i < fileList.length; i += 1) {
+        const item = data[i];
 
-      return existsItems.length > 0;
+        if (
+          typeof fileList[i] !== 'string' ||
+          fileList[i].length === 0 ||
+          !item ||
+          Array.isArray(item) ||
+          item.fullpath !== fileList[i] ||
+          typeof item.exists !== 'boolean'
+        ) {
+          throw new Error(
+            'Unable to verify destination files: invalid Kalam record.'
+          );
+        }
+      }
+
+      return data.some((item) => item.exists);
     } catch (e) {
       log.error(e);
 
@@ -331,37 +392,34 @@ export class FileExplorerKalamDataSource {
     onProgress,
     onCompleted,
   }) {
-    checkIf(deviceType, 'string');
-    checkIf(direction, 'string');
-    checkIf(fileList, 'array');
-    checkIf(storageId, 'number');
-    checkIf(onError, 'function');
-    checkIf(onPreprocess, 'function');
-    checkIf(onProgress, 'function');
-    checkIf(onCompleted, 'function');
+    let invoked = false;
+    const notify = createTransferFinalizer({
+      onCompleted,
+      onError,
+      onNotificationError: (error) => log.error(error),
+    });
 
     try {
-      if (isEmpty(destination)) {
-        onError({
-          error: `Invalid path`,
-          stderr: null,
-          data: null,
-        });
+      checkIf(deviceType, 'string');
+      checkIf(direction, 'string');
+      checkIf(fileList, 'array');
+      checkIf(storageId, 'number');
+      checkIf(onError, 'function');
+      checkIf(onPreprocess, 'function');
+      checkIf(onProgress, 'function');
+      checkIf(onCompleted, 'function');
 
-        return;
+      if (isEmpty(destination)) {
+        throw new Error('Invalid path');
       }
 
       if (isEmpty(fileList) || !isArray(fileList)) {
-        onError({
-          error: `No files selected`,
-          stderr: null,
-          data: null,
-        });
-
-        return;
+        throw new Error('No files selected');
       }
 
-      return this.kalamFfi.transferFiles({
+      invoked = true;
+
+      return await this.kalamFfi.transferFiles({
         direction,
         storageId,
         destination,
@@ -396,13 +454,23 @@ export class FileExplorerKalamDataSource {
             direction,
           });
         },
-        onError,
-        onCompleted,
+        onError: notify,
+        onCompleted: notify,
       });
     } catch (e) {
-      log.error(e);
+      const result = createTransferResult({
+        status: invoked ? 'unknown' : 'failed',
+        backend: 'kalam',
+        direction,
+        error: e,
+        reason: 'adapter-error',
+        backendStopped: invoked ? null : true,
+        files: { requested: fileList },
+      });
 
-      return { error: e, stderr: null, data: false };
+      notify(result);
+
+      return result;
     }
   }
 
@@ -434,7 +502,7 @@ export class FileExplorerKalamDataSource {
     } catch (e) {
       log.error(e);
 
-      return { error: null, stderr: null, data: null };
+      return { error: e, stderr: null, data: null };
     }
   }
 }

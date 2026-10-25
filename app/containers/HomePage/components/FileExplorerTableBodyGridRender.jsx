@@ -1,3 +1,4 @@
+/* eslint global-require: off */
 import React, { PureComponent } from 'react';
 import classNames from 'classnames';
 import { withStyles } from '@material-ui/core/styles';
@@ -10,6 +11,8 @@ import { springTruncate } from '../../../utils/funcs';
 import { FILE_EXPLORER_GRID_TRUNCATE_MAX_CHARS } from '../../../constants';
 import { styles } from '../styles/FileExplorerTableBodyGridRender';
 import { imgsrc } from '../../../utils/imgsrc';
+import FileExplorerThumbnail from './FileExplorerThumbnail';
+import { isLocalThumbnailItem } from '../../../data/file-explorer/thumbnails/LocalThumbnailProvider';
 
 class FileExplorerTableBodyGridRender extends PureComponent {
   RenderFileIcon = () => {
@@ -19,25 +22,56 @@ class FileExplorerTableBodyGridRender extends PureComponent {
       _eventTarget,
       tableData,
       onContextMenuClick,
+      deviceType,
+      directoryGeneratedTime,
+      mtpDevice,
     } = this.props;
 
     const fileIcon = prettyFileIcons.getIcon(item.name, 'svg');
+    const mtpContext =
+      deviceType === 'mtp' &&
+      mtpDevice?.isAvailable &&
+      /\.(jpe?g|png)$/i.test(item.name)
+        ? require('../../../data/file-explorer/thumbnails/MtpThumbnailProvider').captureMtpThumbnailContext(
+            item
+          )
+        : null;
 
     return (
       <div className={styles.fileTypeIconWrapper}>
-        <img
-          src={imgsrc(`file-types/${fileIcon}`)}
-          alt={item.name}
-          className={classNames(styles.fileTypeIcon)}
-          onContextMenu={(event) =>
-            onContextMenuClick(
-              event,
-              { ...item },
-              { ...tableData },
-              _eventTarget
-            )
-          }
-        />
+        {isLocalThumbnailItem(item, deviceType) || mtpContext ? (
+          <FileExplorerThumbnail
+            item={item}
+            deviceType={deviceType}
+            revision={directoryGeneratedTime}
+            mtpContext={mtpContext}
+            fallbackSrc={imgsrc(`file-types/${fileIcon}`)}
+            className={styles.fileTypeIcon}
+            thumbnailClassName={styles.thumbnail}
+            onContextMenu={(event) =>
+              onContextMenuClick(
+                event,
+                { ...item },
+                { ...tableData },
+                _eventTarget
+              )
+            }
+          />
+        ) : (
+          <img
+            src={imgsrc(`file-types/${fileIcon}`)}
+            alt={item.name}
+            className={classNames(styles.fileTypeIcon)}
+            onContextMenu={(event) =>
+              onContextMenuClick(
+                event,
+                { ...item },
+                { ...tableData },
+                _eventTarget
+              )
+            }
+          />
+        )}
       </div>
     );
   };

@@ -1,4 +1,8 @@
 import { ipcMain } from 'electron';
+import {
+  MtpSessionIpc,
+  isAuthorizedMtpSender,
+} from '../../data/file-explorer/MtpSessionIpc';
 import { IpcEvents } from './IpcEventType';
 import {
   faqsWindow,
@@ -10,8 +14,58 @@ import {
 export default class IpcEventService {
   static shared = new IpcEventService();
 
-  start() {
+  start({
+    getMainWindow = () => null,
+    getDiagnosticSender = () => null,
+    expectedUrl,
+    service = null,
+    transport = null,
+    wire = null,
+  } = {}) {
     this.#init();
+    if (!this.mtpSessionIpc) {
+      this.mtpSessionIpc = new MtpSessionIpc({
+        ipcMain,
+        service,
+        transport,
+        wire,
+        isAuthorizedSender: (event) =>
+          isAuthorizedMtpSender(event, getMainWindow(), expectedUrl),
+      });
+      this.mtpSessionIpc.start();
+      if (service) {
+        ipcMain.handle(IpcEvents.MTP_DIAGNOSTIC_REQUEST, async (event) => {
+          const main = getMainWindow();
+          const report = getDiagnosticSender();
+          const allowedMain = isAuthorizedMtpSender(event, main, expectedUrl);
+          const allowedReport =
+            report &&
+            event.sender === report &&
+            !report.isDestroyed() &&
+            event.senderFrame === report.mainFrame &&
+            event.senderFrame.url === `${expectedUrl}#reportBugsPage`;
+
+          if (!allowedMain && !allowedReport)
+            return { error: 'Unauthorized diagnostic sender.' };
+          try {
+            const value = await service.request(
+              'diagnostic',
+              'fetchDebugReport',
+              {},
+              null
+            );
+
+            return {
+              error: value?.error
+                ? String(value.error.message || value.error)
+                : value?.stderr || null,
+            };
+          } catch (error) {
+            return { error: String(error.message).slice(0, 2048) };
+          }
+        });
+      }
+    }
   }
 
   #init = () => {

@@ -18,6 +18,11 @@ import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
 import IconButton from '@material-ui/core/IconButton';
 import Tooltip from '@material-ui/core/Tooltip';
+import {
+  captureMtpScope,
+  invalidateRendererMtp,
+  isCurrentMtpScope,
+} from '../../../data/file-explorer/repositories/FileExplorerRepository';
 import { styles } from '../styles/FileExplorer';
 import {
   TextFieldEdit as TextFieldEditDialog,
@@ -33,6 +38,7 @@ import {
   churnMtpBuffer,
   churnLocalBuffer,
   initializeMtp,
+  disconnectRendererMtp,
   getSelectedStorageIdFromState,
   setFileTransferClipboard,
   setFilesDrag,
@@ -105,6 +111,7 @@ import {
 } from '../../../enums';
 import { log } from '../../../utils/log';
 import fileExplorerController from '../../../data/file-explorer/controllers/FileExplorerController';
+import { createTransferResult } from '../../../data/file-explorer/transferResult';
 import { checkIf } from '../../../utils/checkIf';
 import { analyticsService } from '../../../services/analytics';
 import { EVENT_TYPE } from '../../../enums/events';
@@ -266,7 +273,9 @@ class FileExplorer extends Component {
   }
 
   componentWillUnmount() {
-    const { actionCreatedDisposeMtp, deviceType } = this.props;
+    this.pastePlan = null;
+    this.pasteScope = null;
+    const { deviceType, actionCreatedDisposeMtp } = this.props;
 
     this.deregisterAccelerators();
 
@@ -288,7 +297,7 @@ class FileExplorer extends Component {
       );
     }
 
-    actionCreatedDisposeMtp({ deviceType });
+    if (deviceType === DEVICE_TYPE.mtp) actionCreatedDisposeMtp({ deviceType });
   }
 
   registerAccelerators = () => {
@@ -359,9 +368,6 @@ class FileExplorer extends Component {
   };
 
   _reportBugsDisposeMtpEvent = async (_, { logFileZippedPath }) => {
-    // dispose the mtp before generating the report
-    await fileExplorerController.dispose({ deviceType: DEVICE_TYPE.mtp });
-
     await fileExplorerController.fetchDebugReport({
       deviceType: DEVICE_TYPE.mtp,
     });
@@ -383,6 +389,7 @@ class FileExplorer extends Component {
       deviceType,
       hideHiddenFiles,
       enableUsbHotplug,
+      actionCreateDisconnectMtp,
       mtpMode,
     } = this.props;
 
@@ -409,6 +416,21 @@ class FileExplorer extends Component {
         vendorId: _usbDeviceInfo.vendorId,
         eventName,
       });
+
+      if (eventName === USB_HOTPLUG_EVENTS.detach) {
+        const serial = mtpDevice?.info?.usbDeviceInfo?.SerialNumber;
+
+        if (
+          !serial ||
+          !_usbDeviceInfo.serialNumber ||
+          serial === _usbDeviceInfo.serialNumber
+        ) {
+          invalidateRendererMtp();
+          actionCreateDisconnectMtp();
+
+          return;
+        }
+      }
 
       // if the mtp mode is not kalam then dont proceed.
       if (mtpMode !== MTP_MODE.kalam) {
@@ -1229,6 +1251,7 @@ class FileExplorer extends Component {
   };
 
   _handleToggleDialogBox = ({ ...args }, targetAction) => {
+    if (args.toggle) this.dialogScope = captureMtpScope();
     const { toggleDialog } = this.state;
 
     this.setState({
@@ -1255,6 +1278,36 @@ class FileExplorer extends Component {
     });
   };
 
+  _filesExist = async (args, { forPaste = false } = {}) => {
+    const origin = captureMtpScope();
+
+    try {
+      const result = await fileExplorerController.filesExist(args);
+
+      if (typeof result !== 'boolean')
+        throw new Error(
+          result?.error?.message ||
+            result?.error ||
+            'Unable to verify destination files.'
+        );
+
+      return result;
+    } catch (error) {
+      const { actionCreateThrowError } = this.props;
+      const current = captureMtpScope();
+      // A failed Kalam lookup can disable readiness without changing identity.
+      const relevant = forPaste
+        ? Object.keys(origin).every((key) => origin[key] === current[key])
+        : isCurrentMtpScope(origin);
+
+      if (args.deviceType !== DEVICE_TYPE.mtp || relevant)
+        actionCreateThrowError({ message: error.message });
+
+      // Truthy for existing edit guards; Paste must explicitly reject unknown.
+      return { status: 'unknown', error };
+    }
+  };
+
   _handleRenameEditDialog = async ({ ...args }) => {
     const {
       deviceType,
@@ -1263,6 +1316,9 @@ class FileExplorer extends Component {
       currentBrowsePath,
       storageId,
     } = this.props;
+
+    if (deviceType === DEVICE_TYPE.mtp && !isCurrentMtpScope(this.dialogScope))
+      return null;
 
     // eslint-disable-next-line react/destructuring-assignment
     const { data } = this.state.toggleDialog.rename;
@@ -1329,7 +1385,7 @@ class FileExplorer extends Component {
     // if the new filename and the existing filename are just case different then skip the edit dialog
     if (sanitizedNewFilename.toLowerCase() !== filename.toLowerCase()) {
       if (
-        await fileExplorerController.filesExist({
+        await this._filesExist({
           deviceType,
           fileList: [newFilepath],
           storageId,
@@ -1354,6 +1410,8 @@ class FileExplorer extends Component {
       }
     }
 
+    if (deviceType === DEVICE_TYPE.mtp && !isCurrentMtpScope(this.dialogScope))
+      return null;
     actionCreateRenameFile(
       {
         filePath,
@@ -1522,6 +1580,9 @@ class FileExplorer extends Component {
     const { actionCreateCopy, filesDrag } = this.props;
     const { sourceDeviceType, destinationDeviceType } = filesDrag;
 
+    if (!externalFiles?.length && !isCurrentMtpScope(filesDrag.mtpScope))
+      return null;
+
     if (
       !allowFileDropFlag ||
       sourceDeviceType === destinationDeviceType ||
@@ -1552,7 +1613,10 @@ class FileExplorer extends Component {
 
     actionCreateCopy({ selected, deviceType: sourceDeviceType });
 
+    const dropScope = captureMtpScope();
+
     setTimeout(() => {
+      if (!isCurrentMtpScope(dropScope)) return;
       this._handlePaste();
       this._handleClearFilesDrag();
     }, 200);
@@ -1580,7 +1644,7 @@ class FileExplorer extends Component {
   _handleSetFilesDrag = ({ ...args }) => {
     const { actionCreateSetFilesDrag } = this.props;
 
-    actionCreateSetFilesDrag({ ...args });
+    actionCreateSetFilesDrag({ ...args, mtpScope: captureMtpScope() });
   };
 
   _handleClearFilesDrag = () => {
@@ -1597,6 +1661,9 @@ class FileExplorer extends Component {
       currentBrowsePath,
       storageId,
     } = this.props;
+
+    if (deviceType === DEVICE_TYPE.mtp && !isCurrentMtpScope(this.dialogScope))
+      return null;
 
     // eslint-disable-next-line react/destructuring-assignment
     const { data } = this.state.toggleDialog.newFolder;
@@ -1663,7 +1730,7 @@ class FileExplorer extends Component {
     const newFolderPath = sanitizePath(`${data.path}/${newFolderName}`);
 
     if (
-      await fileExplorerController.filesExist({
+      await this._filesExist({
         deviceType,
         fileList: [newFolderPath],
         storageId,
@@ -1687,6 +1754,8 @@ class FileExplorer extends Component {
       return null;
     }
 
+    if (deviceType === DEVICE_TYPE.mtp && !isCurrentMtpScope(this.dialogScope))
+      return null;
     actionCreateNewFolder(
       {
         newFolderPath,
@@ -1702,6 +1771,8 @@ class FileExplorer extends Component {
   };
 
   _handlePaste = async () => {
+    this.pastePlan = null;
+    this.pasteScope = captureMtpScope();
     const {
       deviceType,
       currentBrowsePath,
@@ -1709,95 +1780,175 @@ class FileExplorer extends Component {
       fileTransferClipboard,
       actionCreateThrowError,
     } = this.props;
-
-    let { queue } = fileTransferClipboard;
+    const source = fileTransferClipboard?.source;
+    const sources = fileTransferClipboard?.queue;
     const destinationFolder = currentBrowsePath[deviceType];
-    let invalidFileNameFlag = false;
-    const deviceTypeUpperCase = deviceType.toUpperCase();
+    const validEndpoints =
+      (source === DEVICE_TYPE.local && deviceType === DEVICE_TYPE.mtp) ||
+      (source === DEVICE_TYPE.mtp && deviceType === DEVICE_TYPE.local);
+    const names = new Set();
+    const validPaths =
+      Array.isArray(sources) &&
+      sources.length > 0 &&
+      sources.every((item) => {
+        if (
+          typeof item !== 'string' ||
+          !path.posix.isAbsolute(item) ||
+          path.posix.normalize(item) !== item ||
+          item === '/'
+        )
+          return false;
+        const name = baseName(item).normalize('NFC').toLowerCase();
 
-    queue = queue.map((a) => {
-      const _baseName = baseName(a);
-      const fullPath = `${destinationFolder}/${_baseName}`;
+        if (names.has(name)) return false;
+        names.add(name);
 
-      if (fullPath.trim() === '' || /[\\:]/g.test(fullPath)) {
-        invalidFileNameFlag = true;
-      }
+        return !/[\\:]/.test(item) && !item.includes('\0');
+      });
 
-      return fullPath;
-    });
-
-    analyticsService.sendEvent(
-      EVENT_TYPE[`${deviceTypeUpperCase}_PASTE_FILES`],
-      {}
-    );
-
-    if (invalidFileNameFlag) {
+    if (
+      !validEndpoints ||
+      !validPaths ||
+      typeof destinationFolder !== 'string' ||
+      !path.posix.isAbsolute(destinationFolder) ||
+      !isCurrentMtpScope(this.pasteScope) ||
+      (source === DEVICE_TYPE.mtp &&
+        !isCurrentMtpScope(fileTransferClipboard.mtpScope))
+    ) {
+      this.pasteScope = null;
+      this._handleTogglePasteConfirmDialog(false);
       actionCreateThrowError({
-        message: `Invalid file name in the path. \\: characters are not allowed.`,
+        message:
+          'Paste requires a current cross-endpoint clipboard with unique, valid destination names.',
       });
 
       return null;
     }
 
-    if (
-      await fileExplorerController.filesExist({
-        deviceType,
-        fileList: queue,
-        storageId,
-      })
-    ) {
-      analyticsService.sendEvent(
-        EVENT_TYPE[`${deviceTypeUpperCase}_PASTE_FILES_DIALOG_OPEN`],
-        {
-          Reason: 'FILES_EXIST',
-        }
-      );
+    const plan = {
+      scope: this.pasteScope,
+      deviceType,
+      storageId,
+      destinationFolder,
+      clipboard: fileTransferClipboard,
+      source,
+      sources: Object.freeze([...sources]),
+    };
 
+    plan.isCurrent = () => {
+      const current = this.props;
+      const clipboard = current.fileTransferClipboard;
+
+      return (
+        isCurrentMtpScope(plan.scope) &&
+        current.deviceType === plan.deviceType &&
+        current.storageId === plan.storageId &&
+        current.currentBrowsePath[current.deviceType] ===
+          plan.destinationFolder &&
+        clipboard === plan.clipboard &&
+        clipboard.source === plan.source &&
+        (plan.source !== DEVICE_TYPE.mtp ||
+          isCurrentMtpScope(clipboard.mtpScope)) &&
+        Array.isArray(clipboard.queue) &&
+        clipboard.queue.length === plan.sources.length &&
+        plan.sources.every((item, index) => item === clipboard.queue[index])
+      );
+    };
+
+    this.pastePlan = plan;
+    analyticsService.sendEvent(
+      EVENT_TYPE[`${deviceType.toUpperCase()}_PASTE_FILES`],
+      {}
+    );
+    const exists = await this._filesExist(
+      {
+        deviceType,
+        fileList: plan.sources.map((item) =>
+          path.posix.join(destinationFolder, baseName(item))
+        ),
+        storageId,
+      },
+      { forPaste: true }
+    );
+
+    // An older lookup must not reopen or replace a newer confirmation.
+    if (this.pastePlan !== plan) return null;
+    if (!plan.isCurrent()) {
+      this._handlePasteConfirm(false);
+
+      return null;
+    }
+
+    if (typeof exists !== 'boolean') {
+      this.pastePlan = null;
+      this.pasteScope = null;
+      this._handleTogglePasteConfirmDialog(false);
+
+      return null;
+    }
+
+    if (exists) {
+      analyticsService.sendEvent(
+        EVENT_TYPE[`${deviceType.toUpperCase()}_PASTE_FILES_DIALOG_OPEN`],
+        { Reason: 'FILES_EXIST' }
+      );
       this._handleTogglePasteConfirmDialog(true);
 
       return null;
     }
 
     this._handlePasteConfirm(true);
+
+    return null;
   };
 
   _handlePasteConfirm = (confirm) => {
+    const plan = this.pastePlan;
+
+    // Consume this authorization before dispatch, including cancellation.
+    this.pastePlan = null;
+    this.pasteScope = null;
+    this._handleTogglePasteConfirmDialog(false);
+    if (!plan) return null;
+    if (!confirm) {
+      analyticsService.sendEvent(
+        EVENT_TYPE[`${plan.deviceType.toUpperCase()}_PASTE_FILES_DIALOG_CLOSE`],
+        { Reason: 'REPLACE_FILES_DENIED' }
+      );
+
+      return null;
+    }
+
     const {
       deviceType,
       hideHiddenFiles,
-      currentBrowsePath,
-      storageId,
       actionCreatePaste,
-      fileTransferClipboard,
+      actionCreateThrowError,
     } = this.props;
-    const destinationFolder = currentBrowsePath[deviceType];
 
-    this._handleTogglePasteConfirmDialog(false);
-    const deviceTypeUpperCase = deviceType.toUpperCase();
-
-    if (!confirm) {
-      analyticsService.sendEvent(
-        EVENT_TYPE[`${deviceTypeUpperCase}_PASTE_FILES_DIALOG_CLOSE`],
-        {
-          Reason: 'REPLACE_FILES_DENIED',
-        }
-      );
+    if (!plan.isCurrent()) {
+      actionCreateThrowError({
+        message:
+          'Paste context changed. Start Paste again in the intended destination.',
+      });
 
       return null;
     }
 
     actionCreatePaste(
       {
-        destinationFolder,
-        storageId,
-        fileTransferClipboard,
+        destinationFolder: plan.destinationFolder,
+        storageId: plan.storageId,
+        fileTransferClipboard: plan.clipboard,
       },
       {
-        filePath: destinationFolder,
+        filePath: plan.destinationFolder,
         ignoreHidden: hideHiddenFiles[deviceType],
       },
       deviceType
     );
+
+    return null;
   };
 
   _handleBreadcrumbPathClick = ({ ...args }) => {
@@ -2448,6 +2599,24 @@ const mapDispatchToProps = (dispatch, _) =>
         ({ selected, deviceType, toQueue = false }) =>
         async (_, getState) => {
           try {
+            if (
+              deviceType === DEVICE_TYPE.mtp &&
+              !isCurrentMtpScope(
+                getState().Home.directoryLists[deviceType].mtpScope
+              )
+            )
+              return;
+            const { clipboard } = getState().Home.fileTransfer;
+
+            if (toQueue && clipboard.queue.length > 0) {
+              if (clipboard.source !== deviceType) return;
+              if (
+                deviceType === DEVICE_TYPE.mtp &&
+                !isCurrentMtpScope(clipboard.mtpScope)
+              )
+                return;
+            }
+
             let queue = [];
 
             if (toQueue && isArray(selected) && selected.length > 0) {
@@ -2465,6 +2634,7 @@ const mapDispatchToProps = (dispatch, _) =>
               setFileTransferClipboard({
                 queue,
                 source: deviceType,
+                mtpScope: captureMtpScope(),
               })
             );
 
@@ -2476,23 +2646,142 @@ const mapDispatchToProps = (dispatch, _) =>
 
       actionCreatePaste:
         ({ ...pasteArgs }, { ...listDirectoryArgs }, deviceType) =>
-        (_, getState) => {
+        async (_, getState) => {
           let sessionElapsedTime = 0;
           const sessionTransferSpeeds = [];
           let sessionTotalFiles = 0;
           let sessionTransferDirection;
+          let terminal = false;
+          const originScope = captureMtpScope();
+          const progressId = `${Date.now()}:${Math.random()}`;
+          const originalClipboard = getState().Home.fileTransfer.clipboard;
+          const relevant = (allowUnavailable = false) => {
+            const currentScope = captureMtpScope();
+            const matches = allowUnavailable
+              ? Object.keys(originScope).every(
+                  (key) => originScope[key] === currentScope[key]
+                )
+              : isCurrentMtpScope(originScope);
+
+            return (
+              matches &&
+              getState().Home.currentBrowsePath?.[deviceType] ===
+                pasteArgs.destinationFolder &&
+              getState().Home.fileTransfer.clipboard === originalClipboard
+            );
+          };
+          const { mtpMode, filesPreprocessingBeforeTransfer } =
+            getState().Settings;
+          const stopWindowProgress = () => {
+            try {
+              getCurrentWindow().setProgressBar(-1);
+            } catch (error) {
+              log.error(error);
+            }
+          };
+          const closeOwnProgress = () => {
+            if (
+              getState().Home.fileTransfer.progress.operationId === progressId
+            ) {
+              stopWindowProgress();
+              dispatch(
+                setFileTransferProgress({
+                  toggle: false,
+                  titleText: null,
+                  bottomText: null,
+                  values: [],
+                })
+              );
+            }
+          };
+          const onError = (value) => {
+            if (!relevant(true)) {
+              closeOwnProgress();
+              terminal = true;
+
+              return;
+            }
+
+            if (terminal) {
+              return;
+            }
+
+            terminal = true;
+
+            const result = createTransferResult({
+              ...value,
+              backend: mtpMode,
+              direction: value?.direction || sessionTransferDirection,
+            });
+
+            const activeProgress = getState().Home.fileTransfer.progress;
+
+            if (
+              activeProgress.operationId &&
+              activeProgress.operationId !== progressId
+            ) {
+              dispatch(throwAlert({ message: result.error }));
+
+              return;
+            }
+
+            stopWindowProgress();
+            // Keep the clipboard available for the user; never retry here.
+            dispatch(
+              setFileTransferProgress({
+                toggle: false,
+                titleText: null,
+                bottomText: null,
+                values: [],
+              })
+            );
+            dispatch(
+              throwAlert({
+                message: `${result.error}${
+                  result.destinationMayContainPartialData
+                    ? ' The destination may contain partial data. Source files have not been deleted.'
+                    : ''
+                }`,
+              })
+            );
+            analyticsService.sendEvent(EVENT_TYPE.FILE_TRANSFER_ERROR, {});
+          };
 
           try {
-            const { mtpMode, filesPreprocessingBeforeTransfer } =
-              getState().Settings;
-
             const { destinationFolder, storageId, fileTransferClipboard } =
               pasteArgs;
 
+            if (
+              ![DEVICE_TYPE.local, DEVICE_TYPE.mtp].includes(deviceType) ||
+              fileTransferClipboard !== originalClipboard ||
+              ![DEVICE_TYPE.local, DEVICE_TYPE.mtp].includes(
+                fileTransferClipboard?.source
+              ) ||
+              fileTransferClipboard.source === deviceType ||
+              !Array.isArray(fileTransferClipboard.queue) ||
+              fileTransferClipboard.queue.length === 0 ||
+              !relevant()
+            )
+              throw new Error(
+                'Paste context is obsolete or endpoints are invalid.'
+              );
+
+            if (
+              fileTransferClipboard.source === DEVICE_TYPE.mtp &&
+              !isCurrentMtpScope(fileTransferClipboard.mtpScope)
+            )
+              throw new Error(
+                'Clipboard belongs to an obsolete Android session.'
+              );
             analyticsService.sendEvent(EVENT_TYPE.FILE_TRANSFER_STARTED, {});
 
             // on pre process callback for file transfer
             const onPreprocess = ({ fullPath }) => {
+              if (!relevant()) return;
+              if (terminal) {
+                return;
+              }
+
               const bodyText1 = `Processing "${
                 springTruncate(fullPath, 45).truncatedText
               }"`;
@@ -2503,6 +2792,7 @@ const mapDispatchToProps = (dispatch, _) =>
                   titleText: `Copying files to ${DEVICES_LABEL[deviceType]}...`,
                   bottomText: `If file processing is taking too much time, you may disable it from 'Settings' > 'FILE MANAGER' > 'Display overall progress on the file transfer screen'`,
                   toggle: true,
+                  operationId: progressId,
                   values: [
                     {
                       bodyText1,
@@ -2530,6 +2820,11 @@ const mapDispatchToProps = (dispatch, _) =>
               totalFileProgress,
               direction,
             }) => {
+              if (!relevant()) return;
+              if (terminal) {
+                return;
+              }
+
               let windowProgressBar = 0;
               let bodyText1 = 0;
               let progressText = 0;
@@ -2620,40 +2915,35 @@ const mapDispatchToProps = (dispatch, _) =>
                   titleText: `Copying files to ${DEVICES_LABEL[deviceType]}...`,
                   bottomText: null,
                   toggle: true,
+                  operationId: progressId,
                   values: progressInfo,
                 })
               );
             };
 
-            // on error callback for file transfer
-            const onError = ({ error, stderr, data }) => {
-              dispatch(
-                churnMtpBuffer({
-                  deviceType: DEVICE_TYPE.mtp,
-                  error,
-                  stderr,
-                  data,
-                  mtpMode,
-                  onSuccess: () => {
-                    getCurrentWindow().setProgressBar(-1);
-                    dispatch(clearFileTransfer());
-                    dispatch(
-                      listDirectory(
-                        { ...listDirectoryArgs },
-                        deviceType,
-                        getState
-                      )
-                    );
-                  },
-                })
-              );
-
-              analyticsService.sendEvent(EVENT_TYPE.FILE_TRANSFER_ERROR, {});
-            };
-
             // on completed callback for file transfer
-            const onCompleted = () => {
-              getCurrentWindow().setProgressBar(-1);
+            const onCompleted = (value) => {
+              if (!relevant()) {
+                closeOwnProgress();
+                terminal = true;
+
+                return;
+              }
+
+              if (terminal) {
+                return;
+              }
+
+              const result = createTransferResult(value);
+
+              if (result.status !== 'completed') {
+                onError(result);
+
+                return;
+              }
+
+              terminal = true;
+              stopWindowProgress();
               dispatch(clearFileTransfer());
               dispatch(
                 listDirectory({ ...listDirectoryArgs }, deviceType, getState)
@@ -2673,7 +2963,7 @@ const mapDispatchToProps = (dispatch, _) =>
 
             switch (deviceType) {
               case DEVICE_TYPE.local:
-                fileExplorerController.transferFiles({
+                await fileExplorerController.transferFiles({
                   deviceType: DEVICE_TYPE.mtp,
                   destination: destinationFolder,
                   storageId,
@@ -2687,7 +2977,7 @@ const mapDispatchToProps = (dispatch, _) =>
 
                 break;
               case DEVICE_TYPE.mtp:
-                fileExplorerController.transferFiles({
+                await fileExplorerController.transferFiles({
                   deviceType: DEVICE_TYPE.mtp,
                   destination: destinationFolder,
                   storageId,
@@ -2705,6 +2995,11 @@ const mapDispatchToProps = (dispatch, _) =>
             }
           } catch (e) {
             log.error(e);
+            onError({
+              status: 'unknown',
+              error: e,
+              reason: 'ui-transfer-error',
+            });
           }
         },
 
@@ -2725,6 +3020,7 @@ const mapDispatchToProps = (dispatch, _) =>
           log.error(e);
         }
       },
+      actionCreateDisconnectMtp: () => () => dispatch(disconnectRendererMtp()),
       actionCreatedDisposeMtp:
         ({ deviceType }) =>
         (_, getState) => {

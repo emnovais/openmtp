@@ -405,41 +405,55 @@ export class FileExplorerLocalDataSource {
    */
   async filesExist({ fileList }) {
     try {
-      if (!isArray(fileList)) {
-        return false;
-      }
+      if (!isArray(fileList) || isEmpty(fileList))
+        throw new Error('Invalid destination lookup paths.');
 
-      if (isEmpty(fileList)) {
-        return false;
-      }
+      let exists = false;
 
       for (let i = 0; i < fileList.length; i += 1) {
         const item = fileList[i];
-        const fullPath = path.resolve(item);
 
+        if (
+          typeof item !== 'string' ||
+          item.length === 0 ||
+          !path.isAbsolute(item)
+        )
+          throw new Error('Invalid destination lookup path.');
+        const fullPath = path.resolve(item);
         // eslint-disable-next-line no-await-in-loop
-        const _accessGranted = await this._requestUsageAccess({
+        const accessGranted = await this._requestUsageAccess({
           filePath: fullPath,
         });
 
-        if (!_accessGranted) {
-          return {
-            data: null,
-            error: 'Permission denied',
-          };
-        }
+        if (accessGranted !== true)
+          throw new Error('Permission denied during destination lookup.');
 
-        // eslint-disable-next-line no-await-in-loop
-        if (await existsSync(fullPath)) {
-          return true;
+        try {
+          // A terminal symlink is an existing entry, even when its target is
+          // missing. Do not turn permission/I/O failures into absence.
+          const info = lstatSync(fullPath);
+
+          if (!info || typeof info.isDirectory !== 'function')
+            throw new Error(
+              'Invalid filesystem metadata during destination lookup.'
+            );
+          exists = true;
+        } catch (error) {
+          if (error.code !== 'ENOENT') throw error;
+          // ENOENT may describe a missing ancestor. Only a confirmed parent
+          // directory permits the existing no-conflict Paste path.
+          const parent = statSync(path.dirname(fullPath));
+
+          if (!parent.isDirectory())
+            throw new Error('Destination parent is not a directory.');
         }
       }
 
-      return false;
+      return exists;
     } catch (e) {
       log.error(e);
 
-      return false;
+      return { error: e, stderr: null, data: null };
     }
   }
 }

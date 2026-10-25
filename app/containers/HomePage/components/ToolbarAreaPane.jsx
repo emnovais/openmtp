@@ -6,6 +6,11 @@ import classNames from 'classnames';
 import { withStyles } from '@material-ui/core/styles';
 import { connect } from 'react-redux';
 import { bindActionCreators } from 'redux';
+import {
+  captureMtpScope,
+  isCurrentMtpScope,
+  isMatchingMtpScope,
+} from '../../../data/file-explorer/repositories/FileExplorerRepository';
 import { styles } from '../styles/ToolbarAreaPane';
 import { withReducer } from '../../../store/reducers/withReducer';
 import reducers from '../reducers';
@@ -17,6 +22,7 @@ import {
   getSelectedStorageIdFromState,
   reloadDirList,
   getSelectedStorage,
+  setFocussedFileExplorerDeviceType,
 } from '../actions';
 import {
   makeDirectoryLists,
@@ -32,13 +38,18 @@ import {
   makeHideHiddenFiles,
   makeMtpMode,
   makeShowLocalPaneOnLeftSide,
+  makeFileExplorerListingType,
 } from '../../Settings/selectors';
 import {
   BUY_ME_A_COFFEE_URL,
   DEVICES_DEFAULT_PATH,
   SUPPORT_PAYPAL_URL,
 } from '../../../constants';
-import { selectMtpMode, toggleSettings } from '../../Settings/actions';
+import {
+  fileExplorerListingType,
+  selectMtpMode,
+  toggleSettings,
+} from '../../Settings/actions';
 import { toggleWindowSizeOnDoubleClick } from '../../../helpers/titlebarDoubleClick';
 import ToolbarBody from './ToolbarBody';
 import { openExternalUrl } from '../../../utils/url';
@@ -51,6 +62,7 @@ import { checkIf } from '../../../utils/checkIf';
 import { analyticsService } from '../../../services/analytics';
 import { EVENT_TYPE } from '../../../enums/events';
 import { IpcEvents } from '../../../services/ipc-events/IpcEventType';
+import { FILE_EXPLORER_BODY_WRAPPER_ID } from '../../../constants/dom';
 
 class ToolbarAreaPane extends PureComponent {
   constructor(props) {
@@ -106,6 +118,7 @@ class ToolbarAreaPane extends PureComponent {
   };
 
   _handleToggleDeleteConfirmDialog = (status) => {
+    if (status) this.deleteScope = captureMtpScope();
     const { deviceType } = this.props;
 
     const dialogStatus = status ? 'OPEN' : 'CLOSE';
@@ -122,6 +135,7 @@ class ToolbarAreaPane extends PureComponent {
   };
 
   _handleToggleMtpStorageSelectionDialog = (status) => {
+    if (status) this.storageScope = captureMtpScope();
     const dialogStatus = status ? 'OPEN' : 'CLOSE';
 
     this.setState({
@@ -135,6 +149,7 @@ class ToolbarAreaPane extends PureComponent {
   };
 
   _handleToggleMtpModeSelectionDialog = (status) => {
+    if (status) this.modeScope = captureMtpScope();
     const dialogStatus = status ? 'OPEN' : 'CLOSE';
 
     this.setState({
@@ -148,6 +163,7 @@ class ToolbarAreaPane extends PureComponent {
   };
 
   _handleMtpStoragesListClick = ({ ...args }) => {
+    if (!isCurrentMtpScope(this.storageScope)) return null;
     const {
       actionCreateSetMtpStorage,
       mtpStoragesList,
@@ -181,6 +197,7 @@ class ToolbarAreaPane extends PureComponent {
   };
 
   _handleMtpModeSelectionDialogClick = ({ ...args }) => {
+    if (!isMatchingMtpScope(this.modeScope)) return null;
     const { actionCreateSelectMtpMode, deviceType, mtpMode } = this.props;
     const { selectedValue, triggerChange } = args;
 
@@ -203,6 +220,9 @@ class ToolbarAreaPane extends PureComponent {
   _handleDeleteConfirmDialog = (confirm) => {
     const { deviceType } = this.props;
 
+    if (deviceType === DEVICE_TYPE.mtp && !isCurrentMtpScope(this.deleteScope))
+      return;
+
     this._handleToggleDeleteConfirmDialog(false);
     if (!confirm) {
       return null;
@@ -215,6 +235,34 @@ class ToolbarAreaPane extends PureComponent {
     const { actionCreateToggleSettings } = this.props;
 
     actionCreateToggleSettings(true);
+  };
+
+  _handleViewModeChange = (value) => {
+    const {
+      deviceType,
+      fileExplorerListingType: listingTypes,
+      actionCreateFileExplorerListingType,
+    } = this.props;
+
+    if (listingTypes[deviceType] !== value) {
+      actionCreateFileExplorerListingType({ value }, deviceType);
+    }
+  };
+
+  _handleViewModeFocus = () => {
+    const {
+      deviceType,
+      focussedFileExplorerDeviceType,
+      actionCreateFocusView,
+    } = this.props;
+
+    if (focussedFileExplorerDeviceType.value !== deviceType) {
+      actionCreateFocusView(deviceType);
+    }
+
+    document
+      .getElementById(`${FILE_EXPLORER_BODY_WRAPPER_ID}-${deviceType}`)
+      ?.focus();
   };
 
   _handleOpenGitHubRepo = () => {
@@ -406,6 +454,8 @@ class ToolbarAreaPane extends PureComponent {
           onListDirectory={this._handleListDirectory}
           onDoubleClickToolBar={this._handleDoubleClickToolBar}
           onToolbarAction={this._handleToolbarAction}
+          onViewModeChange={this._handleViewModeChange}
+          onViewModeFocus={this._handleViewModeFocus}
           {...parentProps}
         />
         <div
@@ -527,7 +577,7 @@ const mapDispatchToProps = (dispatch, _) =>
         { ...listDirArgs },
         deviceType
       ) =>
-        function (_, getState) {
+        async function (_, getState) {
           if (Object.keys(mtpStoragesList).length < 1) {
             return null;
           }
@@ -554,6 +604,7 @@ const mapDispatchToProps = (dispatch, _) =>
             return null;
           });
 
+          await fileExplorerController.selectStorage(Number(selectedValue));
           dispatch(actionChangeMtpStorage({ ..._mtpStoragesList }));
           dispatch(listDirectory({ ...listDirArgs }, deviceType, getState));
         },
@@ -571,6 +622,16 @@ const mapDispatchToProps = (dispatch, _) =>
       actionCreateToggleSettings: (data) => (_, __) => {
         dispatch(toggleSettings(data));
       },
+      actionCreateFileExplorerListingType:
+        ({ ...data }, deviceType) =>
+        (_, getState) => {
+          dispatch(fileExplorerListingType({ ...data }, deviceType, getState));
+        },
+      actionCreateFocusView: (deviceType) =>
+        setFocussedFileExplorerDeviceType({
+          onClick: deviceType,
+          value: deviceType,
+        }),
     },
     dispatch
   );
@@ -588,6 +649,7 @@ const mapStateToProps = (state, __) => {
     appThemeMode: makeAppThemeMode(state),
     mtpMode: makeMtpMode(state),
     showLocalPaneOnLeftSide: makeShowLocalPaneOnLeftSide(state),
+    fileExplorerListingType: makeFileExplorerListingType(state),
   };
 };
 

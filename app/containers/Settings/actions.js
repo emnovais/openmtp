@@ -1,10 +1,11 @@
 import omitLodash from 'lodash/omit';
-import { disposeMtp, initializeMtp } from '../HomePage/actions';
+import { throwAlert } from '../Alerts/actions';
+import fileExplorerController from '../../data/file-explorer/controllers/FileExplorerController';
+import { initializeMtp } from '../HomePage/actions';
 import prefixer from '../../helpers/reducerPrefixer';
 import { settingsStorage } from '../../helpers/storageHelper';
 import { initialState } from './reducers';
 import { checkIf } from '../../utils/checkIf';
-import { MTP_MODE } from '../../enums';
 import { DEVICES_DEFAULT_PATH } from '../../constants';
 import { analyticsService } from '../../services/analytics';
 import { EVENT_TYPE } from '../../enums/events';
@@ -160,28 +161,13 @@ export function selectMtpMode(
       return;
     }
 
-    // reset the mtp device if it was previously connected using kalam
-    if (mtpMode === MTP_MODE.kalam) {
-      const { error, stderr } = await new Promise((resolve) => {
-        dispatch(
-          disposeMtp(
-            {
-              deviceType,
-              onSuccess: ({ error, stderr, data }) => {
-                resolve({ error, stderr, data });
-              },
-              onError: ({ error, stderr, data }) => {
-                resolve({ error, stderr, data });
-              },
-            },
-            getState
-          )
-        );
-      });
+    // The explorer renderer closes its previous backend before changing settings.
+    try {
+      await fileExplorerController.selectBackend(value);
+    } catch (error) {
+      dispatch(throwAlert({ message: error.message }));
 
-      if (error || stderr) {
-        return;
-      }
+      return;
     }
 
     await new Promise((resolve) => {

@@ -1,3 +1,8 @@
+import {
+  captureMtpScope,
+  isCurrentMtpScope,
+  isMatchingMtpScope,
+} from '../../data/file-explorer/repositories/FileExplorerRepository';
 import prefixer from '../../helpers/reducerPrefixer';
 import { throwAlert } from '../Alerts/actions';
 import {
@@ -15,6 +20,7 @@ import { analyticsService } from '../../services/analytics';
 
 const prefix = '@@Home';
 const actionTypesList = [
+  'SET_MTP_SESSION',
   'SET_FOCUSSED_FILE_EXPLORER_DEVICE_TYPE',
   'SET_CURRENT_BROWSE_PATH',
   'SET_SORTING_DIR_LISTS',
@@ -31,6 +37,27 @@ const actionTypesList = [
 ];
 
 export const actionTypes = prefixer(prefix, actionTypesList);
+
+let directoryIntent = 0;
+let localDirectoryIntent = 0;
+
+export function disconnectRendererMtp() {
+  return (dispatch) => {
+    dispatch(
+      actionSetMtpStatus({ info: {}, isAvailable: false, isLoading: false })
+    );
+    dispatch(actionListDirectory([], DEVICE_TYPE.mtp));
+    dispatch(actionSetSelectedDirLists({ selected: [] }, DEVICE_TYPE.mtp));
+    dispatch(
+      setFileTransferProgress({
+        toggle: false,
+        titleText: null,
+        bottomText: null,
+        values: [],
+      })
+    );
+  };
+}
 
 export function setFocussedFileExplorerDeviceType(data) {
   return {
@@ -74,6 +101,7 @@ function actionListDirectory(data, deviceType, _) {
     type: actionTypes.LIST_DIRECTORY,
     deviceType,
     payload: {
+      mtpScope: deviceType === DEVICE_TYPE.mtp ? captureMtpScope() : null,
       nodes: data ?? [],
       isLoaded: true,
     },
@@ -396,6 +424,12 @@ function listKalamStorages(
             mtpMode,
             onSuccess: async () => {
               dispatch(actionChangeMtpStorage({ ...data }));
+              const selectedStorage = getSelectedStorageIdFromState(
+                getState().Home
+              );
+
+              if (selectedStorage !== null)
+                await fileExplorerController.selectStorage(selectedStorage);
 
               onSuccess();
 
@@ -456,7 +490,7 @@ function initLegacyMtp(
           stderr,
           data,
           mtpMode,
-          onSuccess: () => {
+          onSuccess: async () => {
             let updateMtpStorage = true;
 
             if (
@@ -471,6 +505,12 @@ function initLegacyMtp(
               dispatch(actionChangeMtpStorage({ ...data }));
             }
 
+            const selectedStorage = getSelectedStorageIdFromState(
+              getState().Home
+            );
+
+            if (selectedStorage !== null)
+              await fileExplorerController.selectStorage(selectedStorage);
             dispatch(
               listDirectory(
                 {
@@ -519,9 +559,12 @@ export function churnMtpBuffer({
   mtpMode,
   onSuccess,
   onError,
+  isRelevant = () => true,
 }) {
   checkIf(onSuccess, 'function');
   checkIf(mtpMode, 'string');
+
+  const origin = captureMtpScope();
 
   return async (dispatch) => {
     try {
@@ -532,6 +575,8 @@ export function churnMtpBuffer({
         logError: mtpLogError,
         reportError: mtpReportError,
       } = await processMtpBuffer({ error, stderr, mtpMode });
+
+      if (!isRelevant() || !isMatchingMtpScope(origin)) return;
 
       dispatch(
         actionSetMtpStatus({
@@ -632,6 +677,8 @@ export function listDirectory(
     switch (deviceType) {
       case DEVICE_TYPE.local:
         return async (dispatch) => {
+          localDirectoryIntent += 1;
+          const intent = localDirectoryIntent;
           const {
             error: localError,
             stderr: localStderr,
@@ -643,6 +690,7 @@ export function listDirectory(
             storageId: null,
           });
 
+          if (intent !== localDirectoryIntent) return;
           if (localError) {
             log.error(localError, 'listDirectory -> listFiles');
 
@@ -666,6 +714,9 @@ export function listDirectory(
 
       case DEVICE_TYPE.mtp:
         return async (dispatch) => {
+          directoryIntent += 1;
+          const intent = directoryIntent;
+          const origin = captureMtpScope();
           const storageId = getSelectedStorageIdFromState(getState().Home);
 
           if (undefinedOrNull(storageId)) {
@@ -680,8 +731,11 @@ export function listDirectory(
               storageId,
             });
 
+          if (intent !== directoryIntent || !isCurrentMtpScope(origin)) return;
           dispatch(
             churnMtpBuffer({
+              isRelevant: () =>
+                intent === directoryIntent && isCurrentMtpScope(origin),
               deviceType,
               error,
               stderr,
@@ -725,7 +779,8 @@ export function reloadDirList(
   checkIf(ignoreHidden, 'boolean');
   checkIf(getState, 'function');
 
-  const { mtpMode, mtpDevice } = getState().Home;
+  const { mtpDevice } = getState().Home;
+  const { mtpMode } = getState().Settings;
 
   checkIf(mtpDevice, 'object');
 

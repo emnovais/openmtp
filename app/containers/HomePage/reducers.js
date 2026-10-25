@@ -22,6 +22,7 @@ import {
 import { isKalamModeSupported } from '../../helpers/binaries';
 
 export const initialState = {
+  mtpSession: null,
   focussedFileExplorerDeviceType: {
     accelerator: FILE_EXPLORER_DEFAULT_FOCUSSED_DEVICE_TYPE,
     onClick: FILE_EXPLORER_DEFAULT_FOCUSSED_DEVICE_TYPE,
@@ -291,6 +292,9 @@ export default function Home(state = initialState, action) {
   const { type, payload, deviceType = null } = action;
 
   switch (type) {
+    case actionTypes.SET_MTP_SESSION:
+      return { ...state, mtpSession: payload };
+
     case actionTypes.SET_FOCUSSED_FILE_EXPLORER_DEVICE_TYPE:
       return {
         ...state,
@@ -353,6 +357,7 @@ export default function Home(state = initialState, action) {
             ...state.directoryLists[deviceType],
             nodes: [...payload.nodes],
             isLoaded: payload.isLoaded,
+            mtpScope: payload.mtpScope ?? null,
           },
         },
       };

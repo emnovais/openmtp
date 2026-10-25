@@ -228,6 +228,7 @@ export default class AppUpdate {
           case 0:
           default:
             this.autoUpdater.quitAndInstall();
+
             break;
         }
       });

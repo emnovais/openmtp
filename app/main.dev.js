@@ -19,13 +19,7 @@ import { nonBootableDeviceWindow } from './helpers/createWindows';
 import { APP_TITLE } from './constants/meta';
 import { isPackaged } from './utils/isPackaged';
 import { getWindowBackgroundColor } from './helpers/windowHelper';
-import {
-  APP_THEME_MODE_TYPE,
-  DEVICE_TYPE,
-  MTP_MODE,
-  USB_HOTPLUG_EVENTS,
-} from './enums';
-import fileExplorerController from './data/file-explorer/controllers/FileExplorerController';
+import { APP_THEME_MODE_TYPE, MTP_MODE, USB_HOTPLUG_EVENTS } from './enums';
 import { getEnablePrereleaseUpdatesSetting } from './helpers/settings';
 import { getRemoteWindow } from './helpers/remoteWindowHelpers';
 import { IpcEvents } from './services/ipc-events/IpcEventType';
@@ -250,7 +244,11 @@ if (!isDeviceBootable) {
     }
   });
 
-  IpcEventService.shared.start();
+  // B2 execution is paused. The existing endpoint remains passive.
+  IpcEventService.shared.start({
+    getMainWindow: () => mainWindow,
+    expectedUrl: PATHS.loadUrlPath,
+  });
 
   app
     .whenReady()
@@ -324,7 +322,7 @@ if (!isDeviceBootable) {
 
         process.stdout.on('error', (err) => {
           if (err.code === 'EPIPE') {
-            process.exit(0);
+            app.quit();
           }
         });
       } catch (e) {
@@ -347,17 +345,10 @@ if (!isDeviceBootable) {
       log.error(e, `main.dev -> whenReady`);
     });
 
-  app.on('before-quit', async () => {
-    fileExplorerController
-      .dispose({
-        deviceType: DEVICE_TYPE.mtp,
-      })
-      .catch((e) => {
-        log.error(e, `main.dev -> before-quit`);
-      });
-
+  app.on('before-quit', () => {
+    // Process exit is not native cleanup acknowledgement. Main never creates
+    // or disposes the renderer backend, including after initialization failure.
     usbDetect.stopMonitoring();
-
     app.quitting = true;
   });
 

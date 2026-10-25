@@ -1,11 +1,17 @@
 import React, { PureComponent } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import MenuIcon from '@material-ui/icons/Menu';
+import ViewListIcon from '@material-ui/icons/ViewList';
+import ViewModuleIcon from '@material-ui/icons/ViewModule';
+import CheckIcon from '@material-ui/icons/Check';
 import AppBar from '@material-ui/core/AppBar';
 import Toolbar from '@material-ui/core/Toolbar';
 import Drawer from '@material-ui/core/Drawer';
 import IconButton from '@material-ui/core/IconButton';
 import Tooltip from '@material-ui/core/Tooltip';
+import Menu from '@material-ui/core/Menu';
+import MenuItem from '@material-ui/core/MenuItem';
+import ListItemIcon from '@material-ui/core/ListItemIcon';
 import classNames from 'classnames';
 import {
   faSdCard,
@@ -19,12 +25,47 @@ import {
   Confirm as ConfirmDialog,
   Selection as SelectionDialog,
 } from '../../../components/DialogBox';
-import { DEVICE_TYPE, MTP_MODE } from '../../../enums';
+import { DEVICE_TYPE, MTP_MODE, FILE_EXPLORER_VIEW_TYPE } from '../../../enums';
 import { capitalize, isEmpty } from '../../../utils/funcs';
 import { imgsrc } from '../../../utils/imgsrc';
 import { isKalamModeSupported } from '../../../helpers/binaries';
 
 export default class ToolbarAreaPane extends PureComponent {
+  constructor(props) {
+    super(props);
+    this.state = {
+      viewMenuAnchorEl: null,
+    };
+  }
+
+  restoreExplorerFocus = false;
+
+  _handleOpenViewMenu = (event) => {
+    this.restoreExplorerFocus = false;
+    this.setState({ viewMenuAnchorEl: event.currentTarget });
+  };
+
+  _handleCloseViewMenu = () => {
+    this.setState({ viewMenuAnchorEl: null });
+  };
+
+  _handleViewModeChange = (value) => {
+    const { onViewModeChange } = this.props;
+
+    this.restoreExplorerFocus = true;
+    onViewModeChange(value);
+    this._handleCloseViewMenu();
+  };
+
+  _handleViewMenuExited = () => {
+    if (this.restoreExplorerFocus) {
+      const { onViewModeFocus } = this.props;
+
+      this.restoreExplorerFocus = false;
+      onViewModeFocus();
+    }
+  };
+
   activeToolbarList = ({ ...args }) => {
     const {
       toolbarList,
@@ -130,7 +171,19 @@ export default class ToolbarAreaPane extends PureComponent {
       onToolbarAction,
       showLocalPaneOnLeftSide,
       mtpMode,
+      fileExplorerListingType,
     } = this.props;
+
+    const { viewMenuAnchorEl } = this.state;
+    const viewMenuOpen = Boolean(viewMenuAnchorEl);
+    const viewButtonId = `file-explorer-view-button-${deviceType}`;
+    const viewMenuId = `file-explorer-view-menu-${deviceType}`;
+    const viewMode = fileExplorerListingType[deviceType];
+    const isListView = viewMode === FILE_EXPLORER_VIEW_TYPE.list;
+    const viewOptions = [
+      { value: FILE_EXPLORER_VIEW_TYPE.list, label: 'List View' },
+      { value: FILE_EXPLORER_VIEW_TYPE.grid, label: 'Grid View' },
+    ];
 
     const _toolbarList = this.activeToolbarList({
       toolbarList,
@@ -244,13 +297,25 @@ export default class ToolbarAreaPane extends PureComponent {
               </IconButton>
             )}
 
-            <div className={styles.toolbarInnerWrapper}>
+            <div
+              className={`${styles.toolbarInnerWrapper} ${styles.noAppDrag}`}
+              style={{ flex: '0 1 auto', minWidth: 0, overflowX: 'auto' }}
+              onFocusCapture={(event) =>
+                event.target.scrollIntoView({
+                  block: 'nearest',
+                  inline: 'nearest',
+                })
+              }
+            >
               {Object.keys(_toolbarList).map((a) => {
                 const item = _toolbarList[a];
 
                 return (
                   <Tooltip key={a} title={item.label}>
-                    <div className={`${styles.navBtns} ${styles.noAppDrag}`}>
+                    <div
+                      className={`${styles.navBtns} ${styles.noAppDrag}`}
+                      style={{ flexShrink: 0 }}
+                    >
                       <IconButton
                         aria-label={item.label}
                         disabled={!item.enabled}
@@ -282,6 +347,59 @@ export default class ToolbarAreaPane extends PureComponent {
                 );
               })}
             </div>
+            <div
+              className={`${styles.navBtns} ${styles.noAppDrag}`}
+              style={{ flexShrink: 0 }}
+            >
+              <Tooltip
+                title={`View: ${isListView ? 'List View' : 'Grid View'}`}
+              >
+                <IconButton
+                  id={viewButtonId}
+                  size="small"
+                  aria-label={`${DEVICES_LABEL[deviceType]} view`}
+                  aria-haspopup="menu"
+                  aria-controls={viewMenuOpen ? viewMenuId : undefined}
+                  aria-expanded={viewMenuOpen}
+                  onClick={this._handleOpenViewMenu}
+                >
+                  {isListView ? (
+                    <ViewListIcon className={styles.navBtnIcons} />
+                  ) : (
+                    <ViewModuleIcon className={styles.navBtnIcons} />
+                  )}
+                </IconButton>
+              </Tooltip>
+            </div>
+            <Menu
+              id={viewMenuId}
+              anchorEl={viewMenuAnchorEl}
+              open={viewMenuOpen}
+              onClose={this._handleCloseViewMenu}
+              disableRestoreFocus={this.restoreExplorerFocus}
+              MenuListProps={{ 'aria-labelledby': viewButtonId }}
+              TransitionProps={{ onExited: this._handleViewMenuExited }}
+            >
+              {viewOptions.map(({ value, label }) => (
+                <MenuItem
+                  key={value}
+                  role="menuitemradio"
+                  aria-checked={viewMode === value}
+                  selected={viewMode === value}
+                  onClick={() => this._handleViewModeChange(value)}
+                >
+                  <ListItemIcon style={{ minWidth: 32 }}>
+                    <CheckIcon
+                      fontSize="small"
+                      style={{
+                        visibility: viewMode === value ? 'visible' : 'hidden',
+                      }}
+                    />
+                  </ListItemIcon>
+                  {label}
+                </MenuItem>
+              ))}
+            </Menu>
           </Toolbar>
         </AppBar>
       </div>

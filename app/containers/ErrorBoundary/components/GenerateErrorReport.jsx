@@ -18,9 +18,9 @@ import { compressFile } from '../../../utils/gzip';
 import GenerateErrorReportBody from './GenerateErrorReportBody';
 import { baseName } from '../../../utils/files';
 import { log } from '../../../utils/log';
-import { getMainWindowRendererProcess } from '../../../helpers/windowHelper';
 import fileExplorerController from '../../../data/file-explorer/controllers/FileExplorerController';
 import { DEVICE_TYPE } from '../../../enums';
+import { getMainWindowRendererProcess } from '../../../helpers/windowHelper';
 import { getRemoteWindow } from '../../../helpers/remoteWindowHelpers';
 import { IpcEvents } from '../../../services/ipc-events/IpcEventType';
 
@@ -36,12 +36,6 @@ const logFileZippedPath = path.resolve(
 const mailToInstructions = _mailToInstructions(zippedLogFileBaseName);
 
 class GenerateErrorReport extends PureComponent {
-  constructor() {
-    super();
-
-    this.mainWindowRendererProcess = getMainWindowRendererProcess();
-  }
-
   componentWillUnmount() {
     ipcRenderer.removeListener(
       IpcEvents.REPORT_BUGS_DISPOSE_MTP_REPLY_FROM_MAIN,
@@ -65,24 +59,18 @@ class GenerateErrorReport extends PureComponent {
     try {
       const { isReportBugsPage } = this.props;
 
-      // if the generate button click action originated from the 'report bugs' page then use ipc channels to communicate
-      // else use direct method click
       if (isReportBugsPage) {
-        this.mainWindowRendererProcess.webContents.send(
-          IpcEvents.REPORT_BUGS_DISPOSE_MTP,
-          { logFileZippedPath }
-        );
-
         ipcRenderer.once(
           IpcEvents.REPORT_BUGS_DISPOSE_MTP_REPLY_FROM_MAIN,
           this._reportBugsDisposeMtpReplyEvent
         );
+        getMainWindowRendererProcess().webContents.send(
+          IpcEvents.REPORT_BUGS_DISPOSE_MTP,
+          { logFileZippedPath }
+        );
 
         return;
       }
-
-      // direct button click action if the generate button is within the error boundary
-      await fileExplorerController.dispose({ deviceType: DEVICE_TYPE.mtp });
 
       await fileExplorerController.fetchDebugReport({
         deviceType: DEVICE_TYPE.mtp,

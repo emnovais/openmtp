@@ -14,6 +14,11 @@ export const styles = (theme) => ({
     width: 'auto',
     height: 80,
   },
+  thumbnail: {
+    width: 80,
+    height: 80,
+    objectFit: 'contain',
+  },
   fileTypeIconWrapper: {
     ...mixins({ theme }).center,
     paddingTop: 10,

@@ -16,4 +16,10 @@ export class IpcEvents {
     'ipc.reportBugsDisposeMtpReply.fromMain';
 
   static USB_HOTPLUG = 'ipc.usbHotplug';
+
+  static MTP_DIAGNOSTIC_REQUEST = 'ipc.mtpSession.diagnostic';
+
+  static MTP_SESSION_REQUEST = 'ipc.mtpSession.request';
+
+  static MTP_SESSION_EVENT = 'ipc.mtpSession.event';
 }

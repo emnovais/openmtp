@@ -6,146 +6,174 @@ import FileExplorerTableGridRender from './FileExplorerTableBodyGridRender';
 import { quickHash } from '../../../utils/funcs';
 import { styles } from '../styles/FileExplorerTableBodyGridWrapperRender';
 
+// Keep these aligned with the existing Grid tile geometry. Two overscan rows
+// cover the thumbnail observer's 120px nearby margin in both directions.
+const TILE_WIDTH = 100;
+const ROW_HEIGHT = 137;
+const OVERSCAN_ROWS = 2;
+
 class FileExplorerTableBodyGridWrapperRender extends PureComponent {
   constructor(props) {
     super(props);
-
-    const { tableSort } = this.props;
-
-    this.recursiveFilesFetchTimeOut = null;
-    this.filesPreFetchCount = 50;
-    this.state = {
-      items: tableSort.slice(0, this.filesPreFetchCount),
-    };
-
-    this.state = {
-      items: [],
-    };
-
-    this.prevInQueueList = [];
+    this.wrapper = React.createRef();
+    this.state = { columns: 1, firstRow: 0, lastRow: 1 };
+    this.frame = null;
   }
 
   componentDidMount() {
-    const { tableSort } = this.props;
+    const { deviceType } = this.props;
 
-    this.recursiveFilesFetch(tableSort);
+    this.scrollRoot = this.wrapper.current.closest(
+      `#file-explorer-body-wrapper-${deviceType}`
+    );
+    this.scrollRoot.addEventListener('scroll', this.scheduleMeasure, {
+      passive: true,
+    });
+    window.addEventListener('resize', this.scheduleMeasure);
+    this.resizeObserver = new ResizeObserver(this.scheduleMeasure);
+    this.resizeObserver.observe(this.wrapper.current);
+    this.resizeObserver.observe(this.scrollRoot);
+    this.measure();
   }
 
-  componentWillReceiveProps({
-    classes, // eslint-disable-line no-unused-vars
-    tableSort: nextTableSort,
-    directoryGeneratedTime: nextDirectoryGeneratedTime,
-    directoryLists: nextDirectoryLists,
-    ...nextParentProps
-  }) {
-    const { directoryGeneratedTime, directoryLists, deviceType, isSelected } =
-      this.props;
-    const prevSelectedDirectoryLists =
-      directoryLists[deviceType].queue.selected;
-    const nextSelectedDirectoryLists =
-      nextDirectoryLists[deviceType].queue.selected;
+  componentDidUpdate(previous) {
+    const {
+      currentBrowsePath,
+      deviceType,
+      directoryLists,
+      tableSort,
+      directoryGeneratedTime,
+    } = this.props;
+    const directoryChanged =
+      previous.currentBrowsePath?.[deviceType] !==
+      currentBrowsePath?.[deviceType];
 
-    if (nextDirectoryGeneratedTime !== directoryGeneratedTime) {
-      this.clearRecursiveFilesFetchTimeOut();
+    if (directoryChanged) {
+      this.scrollRoot.scrollTop = 0;
+    } else if (previous.directoryLists !== directoryLists) {
+      const { selected } = directoryLists[deviceType].queue;
+      const oldSelected = previous.directoryLists[deviceType].queue.selected;
+      const focused = selected[selected.length - 1];
 
-      this.prevInQueueList = [];
-      this.recursiveFilesFetch(nextTableSort);
-    } else if (prevSelectedDirectoryLists !== nextSelectedDirectoryLists) {
-      const nextInQueueList = [];
+      // Selection lives in the parent over the complete logical list. Reveal
+      // keyboard selections outside the window without moving keyboard focus.
+      if (
+        focused &&
+        focused !== oldSelected[oldSelected.length - 1] &&
+        document.activeElement === this.scrollRoot
+      ) {
+        const index = tableSort.findIndex((item) => item.path === focused);
 
-      nextTableSort.map((item, index) => {
-        if (isSelected(item.path)) {
-          nextInQueueList.push(index);
-        }
+        if (index >= 0) this.reveal(index);
+      }
+    }
 
-        return item;
-      });
-
-      [...this.prevInQueueList, ...nextInQueueList].map((index) => {
-        this.setState(({ items }) => {
-          const _items = items;
-          const item = nextTableSort[index];
-
-          _items[index] = (
-            <FileExplorerTableGridRender
-              {...nextParentProps}
-              key={quickHash(item.path)}
-              item={item}
-              isSelected={nextInQueueList.indexOf(index) > -1}
-            />
-          );
-
-          return {
-            items: _items,
-          };
-        });
-
-        return index;
-      });
-
-      this.prevInQueueList = nextInQueueList;
+    if (
+      directoryChanged ||
+      previous.tableSort !== tableSort ||
+      previous.directoryGeneratedTime !== directoryGeneratedTime
+    ) {
+      this.measure();
     }
   }
 
   componentWillUnmount() {
-    this.clearRecursiveFilesFetchTimeOut();
+    this.scrollRoot.removeEventListener('scroll', this.scheduleMeasure);
+    window.removeEventListener('resize', this.scheduleMeasure);
+    this.resizeObserver.disconnect();
+    if (this.frame !== null) cancelAnimationFrame(this.frame);
   }
 
-  recursiveFilesFetch = (tableSort) => {
-    const { items } = this.state;
-
-    this.recursiveFilesFetchTimeOut = setTimeout(() => {
-      // eslint-disable-next-line no-unused-vars
-      const { classes: styles, isSelected, ...parentProps } = this.props;
-      const hasMore = items.length + 1 < tableSort.length;
-
-      this.setState(({ items: prevItems }) => {
-        const slicedItems = tableSort.slice(
-          0,
-          prevItems.length + this.filesPreFetchCount
-        );
-
-        const mappedSlicedItems = slicedItems.map((item) => {
-          return (
-            <FileExplorerTableGridRender
-              key={quickHash(item.path)}
-              item={item}
-              isSelected={isSelected(item.path)}
-              {...parentProps}
-            />
-          );
-        });
-
-        return {
-          items: mappedSlicedItems,
-        };
-      });
-
-      if (hasMore) {
-        this.recursiveFilesFetch(tableSort);
-      } else {
-        this.clearRecursiveFilesFetchTimeOut();
-
-        return null;
-      }
-    }, 0);
+  scheduleMeasure = () => {
+    if (this.frame !== null) return;
+    this.frame = requestAnimationFrame(() => {
+      this.frame = null;
+      this.measure();
+    });
   };
 
-  clearRecursiveFilesFetchTimeOut() {
-    if (this.recursiveFilesFetchTimeOut) {
-      clearTimeout(this.recursiveFilesFetchTimeOut);
-      this.recursiveFilesFetchTimeOut = null;
+  reveal = (index) => {
+    const { columns } = this.state;
+    const root = this.scrollRoot;
+    const top =
+      this.wrapper.current.getBoundingClientRect().top -
+      root.getBoundingClientRect().top -
+      root.clientTop +
+      root.scrollTop +
+      Math.floor(index / columns) * ROW_HEIGHT;
+
+    if (top < root.scrollTop) root.scrollTop = top;
+    else if (top + ROW_HEIGHT > root.scrollTop + root.clientHeight)
+      root.scrollTop = top + ROW_HEIGHT - root.clientHeight;
+    this.measure();
+  };
+
+  measure = () => {
+    const { tableSort } = this.props;
+    const previous = this.state;
+    const root = this.scrollRoot;
+    const box = this.wrapper.current.getBoundingClientRect();
+    const columns = Math.max(1, Math.floor(box.width / TILE_WIDTH));
+    const rows = Math.ceil(tableSort.length / columns);
+    const top = root.getBoundingClientRect().top + root.clientTop - box.top;
+    const firstRow = Math.max(
+      0,
+      Math.min(rows, Math.floor(top / ROW_HEIGHT) - OVERSCAN_ROWS)
+    );
+    const lastRow = Math.max(
+      firstRow,
+      Math.min(
+        rows,
+        Math.ceil((top + root.clientHeight) / ROW_HEIGHT) + OVERSCAN_ROWS
+      )
+    );
+
+    if (
+      columns !== previous.columns ||
+      firstRow !== previous.firstRow ||
+      lastRow !== previous.lastRow
+    ) {
+      this.setState({ columns, firstRow, lastRow });
     }
-  }
+  };
 
   render() {
-    const { classes: styles } = this.props;
-    const { items } = this.state;
+    const {
+      classes: styles,
+      tableSort,
+      isSelected,
+      ...parentProps
+    } = this.props;
+    const { columns, firstRow, lastRow } = this.state;
+    const rows = Math.ceil(tableSort.length / columns);
 
     return (
       <TableRow>
         <TableCell colSpan={6} className={styles.gridTableCell}>
-          <div className={styles.wrapper}>{items}</div>
+          <div
+            ref={this.wrapper}
+            className={styles.wrapper}
+            style={{ position: 'relative', height: rows * ROW_HEIGHT }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                top: firstRow * ROW_HEIGHT,
+                width: '100%',
+              }}
+            >
+              {tableSort
+                .slice(firstRow * columns, lastRow * columns)
+                .map((item) => (
+                  <FileExplorerTableGridRender
+                    {...parentProps}
+                    key={quickHash(item.path)}
+                    item={item}
+                    isSelected={isSelected(item.path)}
+                  />
+                ))}
+            </div>
+          </div>
         </TableCell>
       </TableRow>
     );

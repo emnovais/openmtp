@@ -1,5 +1,7 @@
 import path from 'path';
 import macosVersion from 'macos-version';
+import { app, ipcMain, ipcRenderer } from 'electron';
+import { selectLegacyCli } from './legacyCliSelection';
 import {
   getPlatform,
   getBinariesSupportedSystemArchitecture,
@@ -79,9 +81,46 @@ const shouldUseKalamSeg5Binaries = () =>
   getBinariesSupportedSystemArchitecture() === OS_ARCH_TYPE.arm64 &&
   macosVersion.is(KALAM_SEG5_MACOS_VERSION_RANGE);
 
-export const mtpCliPath = path.resolve(
+const bundledMtpCliPath = path.resolve(
   path.join(binariesPath({ includeArchDirectory: false }), './mtp-cli')
 );
+
+// Only the main process reads launch configuration. The renderer can ask for
+// the fixed selection, but cannot supply a path, checksum or environment.
+const legacySelectionChannel = 'OPENMTP_LEGACY_EXECUTABLE';
+const legacySelection = (() => {
+  if (process.type === 'renderer') {
+    return ipcRenderer.sendSync(legacySelectionChannel);
+  }
+
+  try {
+    return {
+      path: selectLegacyCli({
+        bundledPath: bundledMtpCliPath,
+        packaged: app.isPackaged,
+        environment: { ...process.env },
+      }),
+    };
+  } catch (error) {
+    return { error: error.message };
+  }
+})();
+
+if (process.type === 'browser') {
+  ipcMain.on(legacySelectionChannel, (event) => {
+    const responseEvent = event;
+
+    responseEvent.returnValue = legacySelection;
+  });
+}
+
+if (!legacySelection?.path) {
+  throw new Error(
+    legacySelection?.error || 'Missing main-process Legacy selection.'
+  );
+}
+
+export const mtpCliPath = legacySelection.path;
 
 export const kalamDebugReportCli = path.resolve(
   path.join(
