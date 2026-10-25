@@ -1,12 +1,12 @@
-# T13 local commit and publication record
+# T13/T14 local commit and publication record
 
-T13 explicitly authorized reviewed staging and local commits. **No push, remote change, tag or release is authorized.** This replaces the earlier seven-group proposal; that proposal remains in the private audit evidence. English and Brazilian Portuguese introductions are maintained in the [English README](../README.md) and [README em português](../README.pt-BR.md).
+T13 explicitly authorized reviewed staging and local commits, without a push. T14 additionally authorizes a non-force push of the reviewed source branch to the existing fork **only after concrete privacy/redistribution blockers are resolved**. No remote change, tag, master merge or binary release is authorized. This replaces the earlier seven-group proposal; that proposal remains in the private audit evidence. English and Brazilian Portuguese introductions are maintained in the [English README](../README.md) and [README em português](../README.pt-BR.md).
 
 ## Git baseline and local branch
 
 Original branch: `feature/advanced-file-manager`, original HEAD `efadaa0745168c9e297eac514b3d2f271ca1d687`. It has no remote tracking branch; local `master` tracks `origin/master`. Origin remains `https://github.com/emnovais/openmtp` for fetch/push. There are no submodules or active Git hook files; the checked-in Husky settings were inspected but their hook is not installed.
 
-The local publication branch is `publication/t11-4-reviewed`, created from that original HEAD while preserving the entire dirty tree. The original feature branch is retained as a rollback reference, without reset, clean, stash or history rewriting. New local commits use the public repository-owner handle and noreply email as command-local author/committer identity; global/local Git identity settings remain unchanged. Prior author metadata is not rewritten and still needs intentional review before public history distribution.
+The local publication branch is `publication/t11-4-reviewed`, created from that original HEAD while preserving the entire dirty tree. The original feature branch is retained as a rollback reference, without reset, clean, stash or history rewriting. New local commits use the public repository-owner handle and noreply email as command-local author/committer identity; global/local Git identity settings remain unchanged. Prior author metadata is preserved. T14 explicitly distinguishes ordinary historical authorship from secrets; ordinary author emails alone do not block publication.
 
 ## Coherent commit boundaries
 
@@ -122,7 +122,7 @@ Go build metadata identifies different dependency generations in inherited binar
 
 The current reviewed text contains no confirmed secret/private key or raw device listing. Legitimate upstream author/contact/artwork notices remain. One physical-test-derived image label in a mocked regression was replaced with a synthetic fixture name; assertions and execution are unchanged. Other user/home/serial strings are deliberate synthetic denied-path or identity fixtures, not captured device identifiers. Private reports, logs, temporary profiles, screenshots and executables remain outside the repository.
 
-Existing environment/certificate/build ignore rules remain intact. No blanket ignore of tests/docs/native assets is introduced. Ignore rules cannot remove already tracked/history content. Existing history includes an author email; the new commits avoid adding it, but that does not clear privacy of inherited history.
+Existing environment/certificate/build ignore rules remain intact. No blanket ignore of tests/docs/native assets is introduced. Ignore rules cannot remove already tracked/history content. Existing historical author metadata remains intact. No genuine secret was identified in the targeted credential-signature scan of candidate changes and reachable history; this bounded review is not a guarantee that every possible sensitive value is absent.
 
 ## Validation and limits
 
@@ -140,7 +140,7 @@ Inherited app ID/settings, updater/publish targets, telemetry identifiers, CI an
 
 ## Proposed push commands — not executed
 
-Only after **separate publication approval** and resolution of native/history-privacy blockers:
+T14 supplies publication approval, conditional on resolving the concrete native redistribution blocker. Before any push, confirm remote branch protections, review the complete scope and perform a non-force dry run. The following commands remain **unexecuted** while that blocker persists:
 
 ```sh
 git status --short
@@ -155,3 +155,11 @@ git push --set-upstream origin publication/t11-4-reviewed:refs/heads/publication
 These commands create no release/tag and use no force option, but a push would still publish inherited binary/history content. Do not execute them just because the new commits are text-only. No push is performed by this plan.
 
 Suggested first announcement: **Development source snapshot: independent List/Grid, virtualized Explorer previews and stronger Mac↔Android transfer safeguards. Experimental native work is documented separately; physical transfer acceptance and an installable release remain pending.** Use the English/Portuguese descriptions and matching draft notes in [RELEASE_NOTES.md](RELEASE_NOTES.md), without claiming a public installer or older-macOS support.
+
+## T14 cleanup, build and publication decision
+
+The three T13 commits (`b41b61b`, `8dab786`, `74e9536`) remain ancestors without rewriting. T14 adds only reviewed privacy/ignore/documentation changes: `.gitignore`, both READMEs, this publication record, the native provenance status clarification, `docs/LOCAL_TEST_BUILD.md`, and a synthetic missing-executable fixture label in `tests/legacy-cli-selection.test.js`. No application logic or original native binary changes are needed. One ignored, untracked `scripts/.DS_Store` was removed after checking its status; no tracked macOS metadata was found. Generic synthetic paths, mock serial values and legitimate attribution are retained. No real device listing or private diagnostic report is added.
+
+A local unsigned ARM64 package and guarded compiled-GUI smoke test succeeded. See [the build record and pending physical acceptance procedure](LOCAL_TEST_BUILD.md). The corrected CLI is not packaged, no physical transfers were performed, and no installer or public binary release exists.
+
+**Push remains blocked, not attempted:** permission for the pinned `go-mtpx` dependency in inherited bundled Go binaries remains unestablished, with incomplete inherited native corresponding-source/notices provenance. This is the already documented concrete [native redistribution blocker](NATIVE_PROVENANCE.md), not a request for another broad licensing investigation or for removal of ordinary author metadata. A text-only new commit does not remove inherited binary content from the history being published. Neither dry-run nor real push should run while the explicit no-blocker condition is unsatisfied. Origin remains the existing fork; no protection bypass, remote edit, merge, tag or release is performed.

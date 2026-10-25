@@ -86,7 +86,7 @@ test('Missing executable fails without falling back silently', () => {
     () =>
       select({
         ...development,
-        OPENMTP_DEV_LEGACY_CLI: '/private/tmp/openmtp-t114-missing-cli',
+        OPENMTP_DEV_LEGACY_CLI: '/private/tmp/openmtp-missing-cli-fixture',
       }),
     /ENOENT/
   );

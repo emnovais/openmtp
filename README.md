@@ -65,13 +65,15 @@ The [development guide](docs/DEVELOPMENT.md) contains reproducible test commands
 
 ## Testing and release status
 
-The publication-preparation validation on 25 October 2026 passed **846/846 Node cases across 17 suites**, **156/156 mocked Electron Grid/UI checks**, JavaScript lint, stylesheet lint and both production compilers. These are offline checks; this documentation task performed no Android operations.
+The publication-preparation validation on 25 October 2026 passed **846/846 Node cases across 17 suites**, **156/156 mocked Electron Grid/UI checks**, **5/5 real Electron main/renderer IPC checks**, JavaScript lint, stylesheet lint and both production compilers. These are offline checks; this documentation task performed no Android operations.
 
 Historical physical observations are deliberately bounded: browsing, selected thumbnails, progressive rendering, cache reuse and T11.4 metadata/preflight. Physical transfer correctness, content integrity, overwrite execution and cancellation remain acceptance work. Older macOS, other devices and Intel-host runtime compatibility are not established by this host's results.
 
 See the [changelog](CHANGELOG.md), [limitations](docs/KNOWN_LIMITATIONS.md), [draft bilingual release notes](docs/RELEASE_NOTES.md) and [publication plan](docs/PUBLICATION_PLAN.md). Publishing source and distributing a finished macOS application have separate readiness requirements, including third-party binary licensing and fork-specific release identity.
 
-T13 prepares reviewed local source commits only. Public publication of this complete Git history remains on hold for [native provenance/license review](docs/NATIVE_PROVENANCE.md), because inherited binaries are already tracked. No physical Copy/Paste, overwrite or cancellation acceptance is claimed.
+T14 produced an unsigned local ARM64 application (3.3.0) and verified compiled Explorer startup in a private, device-blocked smoke copy. It contains the original Legacy CLI; the corrected development executable is not included. This is not a public installer. See the [local test-build record and pending disposable-file procedure](docs/LOCAL_TEST_BUILD.md).
+
+T14 authorizes conditional source publication. Publication of this complete Git history remains on hold for [native provenance/license review](docs/NATIVE_PROVENANCE.md), because inherited binaries are already tracked. No physical Copy/Paste, overwrite or cancellation acceptance is claimed.
 
 ## Credits and contributions
 

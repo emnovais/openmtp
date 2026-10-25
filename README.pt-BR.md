@@ -65,13 +65,15 @@ O [guia de desenvolvimento](docs/DEVELOPMENT.md) reúne os comandos reproduzíve
 
 ## Testes e situação do lançamento
 
-Na validação de preparação do repositório, em 25 de outubro de 2026, passaram **846/846 testes Node em 17 suítes**, **156/156 verificações de Grade/interface no Electron com MTP simulado**, os lints de JavaScript e estilos e os dois compiladores de produção. Essas verificações são offline; esta tarefa de documentação não realizou operações Android.
+Na validação de preparação do repositório, em 25 de outubro de 2026, passaram **846/846 testes Node em 17 suítes**, **156/156 verificações de Grade/interface no Electron com MTP simulado**, **5/5 verificações reais de IPC entre os processos principal e renderizador do Electron**, os lints de JavaScript e estilos e os dois compiladores de produção. Essas verificações são offline; esta tarefa de documentação não realizou operações Android.
 
 As observações físicas anteriores têm limites definidos: navegação, miniaturas selecionadas, exibição progressiva, reutilização do cache e metadados/validação prévia da T11.4. A correção das transferências físicas, a integridade do conteúdo, a execução de sobrescritas e o cancelamento ainda precisam de testes de aceitação. Os resultados deste host não comprovam compatibilidade com versões anteriores do macOS, outros dispositivos ou execução em um Mac Intel.
 
 Consulte o [histórico de alterações](CHANGELOG.md), as [limitações](docs/KNOWN_LIMITATIONS.md), as [notas de lançamento bilíngues em rascunho](docs/RELEASE_NOTES.md) e o [plano de publicação](docs/PUBLICATION_PLAN.md). Publicar o código-fonte e distribuir um aplicativo macOS finalizado têm critérios diferentes, incluindo as licenças dos binários de terceiros e uma identidade de lançamento própria para o fork.
 
-A T13 prepara apenas commits locais do código revisado. A publicação deste histórico Git completo continua bloqueada pela [revisão de procedência e licenças nativas](docs/NATIVE_PROVENANCE.md), pois já existem binários herdados no histórico. Não há alegação de aceitação física de Copiar/Colar, sobrescrita ou cancelamento.
+A T14 gerou um aplicativo ARM64 local sem assinatura de distribuição (3.3.0) e verificou a inicialização do explorador compilado em uma cópia com perfil privado e acesso ao dispositivo bloqueado. O pacote contém o CLI Legacy original; o executável de desenvolvimento corrigido não foi incluído. Isso não constitui um instalador público. Consulte o [registro da compilação local e o procedimento futuro com arquivos descartáveis](docs/LOCAL_TEST_BUILD.md).
+
+A T14 autoriza a publicação condicional do código-fonte. A publicação deste histórico Git completo continua bloqueada pela [revisão de procedência e licenças nativas](docs/NATIVE_PROVENANCE.md), pois já existem binários herdados no histórico. Não há alegação de aceitação física de Copiar/Colar, sobrescrita ou cancelamento.
 
 ## Créditos e contribuições
 
